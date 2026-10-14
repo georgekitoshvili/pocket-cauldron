@@ -1,8 +1,14 @@
 # Pocket Cauldron
 
-A Discord bot for FLASK cards, infusers, monsters and shared parties.
+## Download
 
-[Bot files](bot/) · [Build exporter files](exporter/)
+| Download | What you need |
+| --- | --- |
+| **[Bot only](https://pocket-cauldron-library.pages.dev/downloads/Pocket-Cauldron-Bot.zip)** | Python 3.11+ and your own Discord bot token. |
+| **[Exporter only](https://pocket-cauldron-library.pages.dev/downloads/FLASK-Share-Build-Windows.zip)** | Windows. No Python or token needed. |
+| **[Bot + exporter](https://pocket-cauldron-library.pages.dev/downloads/Pocket-Cauldron-Bot-and-Exporter.zip)** | Both in one ZIP. Python and a token are needed for the bot. |
+
+A Discord bot for FLASK cards, infusers, monsters and shared parties.
 
 ## Commands
 
@@ -30,13 +36,13 @@ The bot shows your characters, flasks, levels, infusers, snacks, mutations and e
 ## Run your own bot
 
 1. Install **[Python 3.11 or newer](https://www.python.org/downloads/)**.
-2. **[Download this repository](https://github.com/georgekitoshvili/pocket-cauldron/archive/refs/heads/main.zip)** and extract the ZIP.
+2. Download **Bot only** or **Bot + exporter** above and extract the ZIP.
 3. Create a bot in the **[Discord Developer Portal](https://discord.com/developers/applications)**. On its **Bot** page, enable **Message Content Intent** and copy its token.
 4. Open the **bot** folder, run **Start Bot.cmd**, and paste the token when asked. Keep the window open.
 5. In the Developer Portal, open **OAuth2 → URL Generator**, select `bot` and `applications.commands`, and enable **View Channels**, **Send Messages**, **Embed Links** and **Attach Files**. Add **Send Messages in Threads** if needed.
 6. Open the generated invite link, choose your server, then try `flask help`.
 
-Keep your bot token private. Never share your `.env` file.
+The Windows launcher creates `.env` from `.env.example` and saves your token automatically. You don't need to edit either file. Keep your token private and never share `.env`.
 
 On Linux or a hosting service, use the **bot** folder as the working directory, install `requirements.txt`, set `DISCORD_TOKEN`, and start with `python bot.py`.
 
