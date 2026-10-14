@@ -2,6 +2,8 @@
 
 A Discord bot for FLASK cards, infusers, monsters and shared parties.
 
+[Bot files](bot/) · [Build exporter files](exporter/)
+
 ## Commands
 
 | Command | What it does |
@@ -30,16 +32,16 @@ The bot shows your characters, flasks, levels, infusers, snacks, mutations and e
 1. Install **[Python 3.11 or newer](https://www.python.org/downloads/)**.
 2. **[Download this repository](https://github.com/georgekitoshvili/pocket-cauldron/archive/refs/heads/main.zip)** and extract the ZIP.
 3. Create a bot in the **[Discord Developer Portal](https://discord.com/developers/applications)**. On its **Bot** page, enable **Message Content Intent** and copy its token.
-4. Run **Start Bot.cmd** and paste the token when asked. Keep the window open.
+4. Open the **bot** folder, run **Start Bot.cmd**, and paste the token when asked. Keep the window open.
 5. In the Developer Portal, open **OAuth2 → URL Generator**, select `bot` and `applications.commands`, and enable **View Channels**, **Send Messages**, **Embed Links** and **Attach Files**. Add **Send Messages in Threads** if needed.
 6. Open the generated invite link, choose your server, then try `flask help`.
 
 Keep your bot token private. Never share your `.env` file.
 
-On Linux or a hosting service, install `requirements.txt`, set `DISCORD_TOKEN`, and start with `python bot.py`.
+On Linux or a hosting service, use the **bot** folder as the working directory, install `requirements.txt`, set `DISCORD_TOKEN`, and start with `python bot.py`.
 
 ## Run the exporter from source
 
-With Python installed, run **Start Exporter.cmd** or `python share_app.py`.
+With Python installed, open the **exporter** folder and run **Start Exporter.cmd** or `python share_app.py`.
 
 Unofficial community project. FLASK content belongs to its respective creators.
