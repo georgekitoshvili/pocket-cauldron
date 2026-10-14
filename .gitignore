@@ -1,0 +1,24 @@
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+exports/
+*.rbs
+*.rbs.*
+*.log
+build/
+dist/
+*.spec
+*.exe
+*.zip
+.DS_Store
+Thumbs.db
+
+# Centrally hosted game content and local test scratch
+assets/
+data/
+.test-temp/
