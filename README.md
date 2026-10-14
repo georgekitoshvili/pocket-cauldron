@@ -1,92 +1,45 @@
 # Pocket Cauldron
 
-A Discord companion for **FLASK**. Look up cards, infusers and monsters, or display a shared party.
+A Discord bot for FLASK cards, infusers, monsters and shared parties.
+
+## Commands
 
 | Command | What it does |
 | --- | --- |
 | `flask help` | Show help and examples. |
-| `flask info Acidburn` | Show a card's artwork and description. |
-| `flask info Acidburn level 3` | Show a specific level. |
+| `flask info Acidburn` | Show a card and its description. |
+| `flask info Acidburn level 3` | Show a specific card level. |
 | `flask info infuser Shielding` | Show an infuser and its effect. |
-| `flask info infuser` | List infusers. |
-| `flask monster Burning Witch` | Show a monster's flask cards. |
-| `flask party FB1.…` | Display a shared party. |
+| `flask info infuser` | List all infusers. |
+| `flask monster Burning Witch` | Show a monster's cards. |
+| `flask party FB1.…` | Show a shared party. |
 
-Use `flask help info`, `flask help monster`, or `flask help party` for examples. Slash commands are under `/flask`; partial names offer a selection menu.
+Slash commands are also available under `/flask`.
 
-## Two projects, one library
+## Share your party
 
-- **This repository:** the Discord bot, run by the bot owner.
-- **[FLASK Build Exporter](https://github.com/georgekitoshvili/flask-build-exporter):** the separate Windows helper players use to copy a saved party into Discord.
-- **[Shared library](https://pocket-cauldron-library.pages.dev/):** centrally maintained game data and artwork, hosted outside both repositories on Cloudflare Pages.
+1. **[Download the Windows build exporter](https://pocket-cauldron-library.pages.dev/downloads/FLASK-Share-Build-Windows.zip)** and extract the ZIP.
+2. Save your run in FLASK, then open **FLASK Share Build.exe**.
+3. Choose your saved run and click **Copy Build**.
+4. Paste into a Discord channel with Pocket Cauldron and press Enter.
 
-The repositories contain source code and documentation. The bot downloads data at startup, checks for updates every 15 minutes, and downloads artwork as needed. Ordinary library updates need no new exporter download. Changes to app code or the game's save format can still require an app update.
+The bot shows your characters, flasks, levels, infusers, snacks, mutations and element tokens. The exporter reads your save without changing it. Players do not need Python or the bot's files. Internet is needed on the first run.
 
-The first run needs internet access. Later runs can use verified cached data during a library outage. Uncached artwork requires a connection.
+## Run your own bot
 
-## Run the bot
+1. Install **[Python 3.11 or newer](https://www.python.org/downloads/)**.
+2. **[Download this repository](https://github.com/georgekitoshvili/pocket-cauldron/archive/refs/heads/main.zip)** and extract the ZIP.
+3. Create a bot in the **[Discord Developer Portal](https://discord.com/developers/applications)**. On its **Bot** page, enable **Message Content Intent** and copy its token.
+4. Run **Start Bot.cmd** and paste the token when asked. Keep the window open.
+5. In the Developer Portal, open **OAuth2 → URL Generator**, select `bot` and `applications.commands`, and enable **View Channels**, **Send Messages**, **Embed Links** and **Attach Files**. Add **Send Messages in Threads** if needed.
+6. Open the generated invite link, choose your server, then try `flask help`.
 
-Requires Python **3.11+** and a Discord bot token. Steam and FLASK do not need to run on the bot's computer.
+Keep your bot token private. Never share your `.env` file.
 
-**Windows:** download and extract this repository, then run **Start Bot.cmd**. It installs dependencies and asks for your token privately. Keep the window open while the bot runs.
+On Linux or a hosting service, install `requirements.txt`, set `DISCORD_TOKEN`, and start with `python bot.py`.
 
-**Other systems or hosting:**
+## Run the exporter from source
 
-```sh
-python -m venv .venv
-# Activate the environment, then:
-python -m pip install -r requirements.txt
-```
+With Python installed, run **Start Exporter.cmd** or `python share_app.py`.
 
-Copy `.env.example` to `.env`, enter `DISCORD_TOKEN`, then run:
-
-```sh
-python bot.py
-```
-
-In the [Discord Developer Portal](https://discord.com/developers/applications), enable **Message Content Intent** for text commands. Invite with `bot` and `applications.commands` scopes and permissions **View Channels**, **Send Messages**, **Embed Links**, **Attach Files**, plus **Send Messages in Threads** if needed.
-
-| Optional setting | Purpose |
-| --- | --- |
-| `DISCORD_GUILD_ID` | Register slash commands immediately in one test server. Leave empty for global commands. |
-| `TEXT_COMMANDS=false` | Use slash commands only. |
-| `FLASK_LIBRARY_URL` | Override the shared HTTPS manifest URL. |
-| `FLASK_LIBRARY_CACHE` | Override the cache folder. |
-
-Keep `.env` private; Git excludes it. Hosted deployments use the same settings and `python bot.py`. Use persistent storage if cached files should survive redeployments. The default cache is `%LOCALAPPDATA%/PocketCauldron/library` on Windows, or `$XDG_CACHE_HOME/pocket-cauldron/library` / `~/.cache/pocket-cauldron/library` elsewhere.
-
-## Share a party
-
-1. Get the Windows app from the [exporter project](https://github.com/georgekitoshvili/flask-build-exporter).
-2. Save a run in FLASK and open **FLASK Share Build**.
-3. Click **Copy Build**, then paste into a channel with this bot.
-
-Players need no bot files, token or Python installation when using the packaged app. The helper reads saves without changing them. It copies a `flask party FB1.…` command containing team details, excluding account IDs, authentication data and the rest of the save. It does not upload saves.
-
-Party views show characters, maximum HP, element tokens, mutations, snacks, flask levels, slot order and multiple infusers per flask. Base descriptions and infuser effects are shown separately; combat buffs and modified numbers are not recalculated. Exported `.flaskbuild.json` files are also accepted with `flask party`.
-
-This is a community sharing format; the game does not currently generate these codes.
-
-## Maintain the shared library
-
-Game updates are published once by the maintainer. Clients automatically pick up the published version; they do not extract Steam files themselves.
-
-Keep prepared `data/` and `assets/` in a separate master folder. The publisher expects `catalog.json`, `infusers.json`, `build-catalog.json` and `build-refs.json` under `data/`, plus referenced PNG artwork. Never commit the master folder or generated site.
-
-```sh
-python tools/publish_library.py --source /path/to/flask-library-master --output /path/to/flask-library-site
-npx wrangler pages deploy /path/to/flask-library-site --project-name pocket-cauldron-library --branch main
-```
-
-Reuse the output folder so earlier immutable revisions remain available to open menus and cached clients. Changed data is verified before replacing the active snapshot. Publishing requires the maintainer's Cloudflare account; users need no Cloudflare credentials.
-
-## Checks
-
-```sh
-python -m unittest discover -s tests -v
-python bot.py --check
-```
-
-Unit tests generate synthetic data and run offline. `--check` validates the shared library without connecting to Discord and may download artwork.
-
-FLASK artwork and game content belong to their respective creators. This is an unofficial community project.
+Unofficial community project. FLASK content belongs to its respective creators.
