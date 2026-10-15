@@ -33,10 +33,10 @@ Slash commands are also available under `/flask`.
 
 1. **[Download the Windows build exporter](https://pocket-cauldron-library.pages.dev/downloads/FLASK-Share-Build-Windows.zip)** and extract the ZIP.
 2. Save your run in FLASK, then open **FLASK Share Build.exe**.
-3. Choose your saved run and click **Copy Build**.
+3. Choose **Current saved team** or a completed run from the list, then click **Copy Build**.
 4. Paste into a Discord channel with Pocket Cauldron and press Enter.
 
-The bot shows your characters, flasks, levels, infusers, snacks, mutations and element tokens. The exporter reads your save without changing it. Players do not need Python or the bot's files. Internet is needed on the first run.
+The bot shows your characters, flasks, levels, infusers, snacks, mutations and element tokens. The exporter includes the current saved team and up to 10 completed runs retained in FLASK’s match history. It reads your save without changing it. Players do not need Python or the bot's files. Internet is needed on the first run.
 
 ## Run your own bot
 

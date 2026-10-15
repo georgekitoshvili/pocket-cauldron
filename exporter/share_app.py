@@ -8,12 +8,12 @@ import re
 import sys
 import threading
 import tkinter as tk
-from datetime import datetime
+from dataclasses import dataclass
 from pathlib import Path
 from tkinter import messagebox, ttk
 
 from build_protocol import decode_code, encode_code, validate_build
-from export_build import export_bytes
+from export_build import SavedRun, export_bytes, export_saved_runs
 from library_client import LibraryClient
 
 ROOT = Path(__file__).resolve().parent
@@ -35,13 +35,27 @@ def save_folder():
     )
 
 
-def read_build(path):
+@dataclass(frozen=True)
+class SavedTeam:
+    path: Path
+    run: SavedRun
+
+
+def read_save_bytes(path):
     before = path.stat()
     raw = path.read_bytes()
     after = path.stat()
     if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
         raise ValueError("FLASK was saving. Wait a moment and try again.")
-    return validate_build(export_bytes(raw, REFS))
+    return raw
+
+
+def read_build(path):
+    return validate_build(export_bytes(read_save_bytes(path), REFS))
+
+
+def read_saved_runs(path):
+    return export_saved_runs(read_save_bytes(path), REFS)
 
 
 def team_name(build):
@@ -98,7 +112,8 @@ class ShareApp:
             anchor="w"
         )
         ttk.Label(
-            frame, text="Save your run in FLASK, then copy and paste into Discord."
+            frame,
+            text="Choose your current team or a completed run, then copy into Discord.",
         ).pack(anchor="w", pady=(8, 18))
         self.selection = tk.StringVar()
         self.saves = []
@@ -118,12 +133,12 @@ class ShareApp:
         self.status = tk.StringVar(value="")
         ttk.Label(frame, textvariable=self.status, wraplength=610).pack(anchor="w")
         self.update_button = ttk.Button(
-            frame, text="Refresh library & saved runs", command=self.update_library
+            frame, text="Refresh library & run history", command=self.update_library
         )
         self.update_button.pack(anchor="w", pady=(12, 0))
         ttk.Label(
             frame,
-            text="Reads saves only. Copies team details; nothing is uploaded.",
+            text="Reads saves only. Includes up to 10 completed runs kept by FLASK. Nothing is uploaded.",
             font=("Segoe UI", 9),
         ).pack(anchor="w", pady=(12, 0))
         self.loading = False
@@ -182,34 +197,59 @@ class ShareApp:
             reverse=True,
         )
         preferred = preferred_save(paths)
-        preferred_index = 0
+        preferred_index = None
         for path in paths:
             try:
-                build = read_build(path)
-                if path == preferred:
-                    preferred_index = len(self.saves)
-                self.saves.append(path)
-                stamp = datetime.fromtimestamp(path.stat().st_mtime).strftime(
-                    "%d %b %H:%M"
-                )
-                labels.append(stamp + " - " + team_name(build))
+                runs = read_saved_runs(path)
             except (ValueError, KeyError, TypeError, OSError):
                 continue
+            for run in runs:
+                if path == preferred and preferred_index is None:
+                    preferred_index = len(self.saves)
+                self.saves.append(SavedTeam(path, run))
+                name = (
+                    team_name(run.build)
+                    if run.build is not None
+                    else "Unable to export"
+                )
+                labels.append(run.label + " — " + name)
         self.combo["values"] = labels
         if self.saves:
-            self.combo.current(min(preferred_index, len(self.saves) - 1))
+            self.combo.current(min(preferred_index or 0, len(self.saves) - 1))
             self.selected()
         else:
             self.selection.set("No saved team found")
             self.details.set(
-                "Start a run in FLASK, return to the tower/map, then click Refresh saved runs."
+                "Save a run in FLASK, then click Refresh library & run history."
             )
             self.status.set("")
 
+    def selected_build(self, reread=False):
+        index = self.combo.current()
+        if not 0 <= index < len(self.saves):
+            raise ValueError("Choose a saved team first.")
+        selection = self.saves[index]
+        run = selection.run
+        if reread:
+            run = next(
+                (
+                    item
+                    for item in read_saved_runs(selection.path)
+                    if item.key == run.key
+                ),
+                None,
+            )
+            if run is None:
+                raise ValueError(
+                    "This run is no longer in the game's saved history. Refresh the list and choose another run."
+                )
+        if run.error or run.build is None:
+            raise ValueError(run.error or "This run has no exportable team.")
+        return run.build
+
     def selected(self, event=None):
         try:
-            path = self.saves[self.combo.current()]
-            build = read_build(path)
+            build = self.selected_build()
             self.details.set(
                 team_name(build)
                 + "\n"
@@ -224,7 +264,9 @@ class ShareApp:
                 + build["gameVersion"]
             )
             self.copy.state(["!disabled"])
-            self.status.set("Ready to copy. You can choose another saved run above.")
+            self.status.set(
+                "Ready to copy. Choose your current team or a completed run above."
+            )
         except (ValueError, KeyError, TypeError, OSError, IndexError) as exc:
             self.copy.state(["disabled"])
             self.status.set(str(exc))
@@ -232,7 +274,7 @@ class ShareApp:
     def copy_build(self):
         try:
             # Re-read on each click so an open helper does not keep sharing stale data.
-            build = read_build(self.saves[self.combo.current()])
+            build = self.selected_build(reread=True)
             command = "flask party " + encode_code(build)
             self.root.clipboard_clear()
             self.root.clipboard_append(command)
@@ -271,9 +313,9 @@ def self_test(output):
         catalog_count=len(NAMES),
         available_saved_teams=len(app.saves),
     )
-    if path:
+    if path and app.saves:
         before = hashlib.sha256(path.read_bytes()).digest()
-        b = read_build(path)
+        b = app.selected_build(reread=True)
         code = encode_code(b)
         assert decode_code(code) == b
         assert hashlib.sha256(path.read_bytes()).digest() == before
@@ -293,6 +335,31 @@ def self_test(output):
         assert decode_code(copied[0].split(" ", 2)[2]) == b
         assert app.status.get().startswith("Copied!")
         result["copy_button_verified"] = True
+    historical = next(
+        (
+            index
+            for index, team in enumerate(app.saves)
+            if team.run.key[0] == "history" and team.run.build is not None
+        ),
+        None,
+    )
+    if historical is not None:
+        app.combo.current(historical)
+        app.selected()
+        expected = app.selected_build(reread=True)
+        copied_history = []
+        window.clipboard_clear = lambda: None
+        window.clipboard_append = lambda text: copied_history.append(text)
+        before = hashlib.sha256(app.saves[historical].path.read_bytes()).digest()
+        app.copy_build()
+        assert decode_code(copied_history[0].split(" ", 2)[2]) == expected
+        assert (
+            hashlib.sha256(app.saves[historical].path.read_bytes()).digest() == before
+        )
+        result["history_copy_verified"] = True
+        result["historical_teams"] = sum(
+            team.run.key[0] == "history" for team in app.saves
+        )
     window.destroy()
     Path(output).write_text(json.dumps(result, indent=2), encoding="utf8")
 

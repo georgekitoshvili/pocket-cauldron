@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import re
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -12,15 +13,92 @@ from odin_reader import OdinReader, SaveError
 ROOT = Path(__file__).resolve().parent
 
 
-def export_bytes(data, refs):
+@dataclass(frozen=True)
+class SavedRun:
+    key: tuple[str, ...]
+    label: str
+    build: dict | None
+    error: str | None = None
+
+
+def read_save(data):
     reader = OdinReader(data)
     root = reader.read()
     if not (root.get("$type") or "").startswith("SaveData,"):
         raise SaveError("Not a FLASK save.")
+    return reader, root
+
+
+def export_bytes(data, refs):
+    reader, root = read_save(data)
     player = reader.resolve(root.get("playerData"))
     if not isinstance(player, dict):
         raise SaveError("No saved player team.")
+    return export_team(
+        reader,
+        player.get("characterList"),
+        player.get("elementTokens"),
+        refs,
+        root.get("gameVersion", "unknown"),
+    )
 
+
+def export_saved_runs(data, refs):
+    """Read the current team and completed teams retained by the game."""
+    from build_protocol import validate_build
+
+    reader, root = read_save(data)
+    version = root.get("gameVersion", "unknown")
+    runs = []
+
+    def add(key, label, characters, tokens):
+        try:
+            if not reader.sequence(characters):
+                return
+            build = validate_build(
+                export_team(reader, characters, tokens, refs, version)
+            )
+        except (ValueError, KeyError, TypeError) as exc:
+            runs.append(SavedRun(key, label, None, str(exc)))
+        else:
+            runs.append(SavedRun(key, label, build))
+
+    player = reader.resolve(root.get("playerData"))
+    if isinstance(player, dict):
+        add(
+            ("current",),
+            "Current saved team",
+            player.get("characterList"),
+            player.get("elementTokens"),
+        )
+    meta = reader.resolve(root.get("metaProgressionData"))
+    history = (
+        reader.sequence(meta.get("matchHistory")) if isinstance(meta, dict) else []
+    )
+    for value in reversed(history):
+        entry = reader.resolve(value)
+        if not isinstance(entry, dict):
+            continue
+        run_number = str(entry.get("runNumber", "?"))
+        completed = str(entry.get("completedAt", ""))
+        label = f"Run #{run_number}"
+        try:
+            date = datetime.fromisoformat(completed.replace("Z", "+00:00"))
+            if date.tzinfo is not None:
+                date = date.astimezone()
+            label += " · " + date.strftime("%d %b %Y %H:%M")
+        except ValueError:
+            pass
+        add(
+            ("history", run_number, completed),
+            label,
+            entry.get("characters"),
+            entry.get("elementTokens"),
+        )
+    return runs
+
+
+def export_team(reader, character_list, element_tokens, refs, version):
     def ident(value):
         value = reader.resolve(value)
         if value is None:
@@ -34,7 +112,7 @@ def export_bytes(data, refs):
 
     characters = []
     # The game's PlayerBuildToJson also reverses characterList for team order.
-    for value in reversed(reader.sequence(player.get("characterList"))):
+    for value in reversed(reader.sequence(character_list)):
         character = reader.resolve(value)
         flasks = []
         for value in reader.sequence(character.get("timeslotList")):
@@ -69,13 +147,13 @@ def export_bytes(data, refs):
     if not characters:
         raise SaveError("This save has no team. Start a run and save it first.")
     tokens = []
-    for value in reader.sequence(player.get("elementTokens")):
+    for value in reader.sequence(element_tokens):
         entry = reader.resolve(value)
         tokens.append(dict(elementId=ident(entry["$k"]), amount=entry["$v"]))
     return dict(
         format="flask-build",
         schema=1,
-        gameVersion=root.get("gameVersion", "unknown"),
+        gameVersion=version,
         exportedAt=datetime.now(timezone.utc).isoformat(),
         build=dict(characters=characters, elementTokens=tokens),
     )
