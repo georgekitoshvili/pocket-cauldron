@@ -330,16 +330,6 @@ class ResultsView(OwnedView):
             discord.SelectOption(
                 label=m.label[:100],
                 value=m.key,
-                description=(
-                    None
-                    if m.kind == "event"
-                    else {
-                        "card": "Flask card",
-                        "monster": "Monster fight",
-                        "infuser": "Infuser",
-                    }[m.kind]
-                    + f" · #{m.item['id']}"
-                ),
             )
             for m in self.matches[self.index * 25 : self.index * 25 + 25]
         ]
