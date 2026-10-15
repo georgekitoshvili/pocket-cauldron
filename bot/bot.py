@@ -275,7 +275,7 @@ class ResultsView(OwnedView):
                 "card": "Select a flask",
                 "monster": "Select a monster fight",
                 "infuser": "Select an infuser",
-                "event": "Select an event",
+                "event": "Select an encounter",
             }.get(next(iter(kinds)), "Select a result")
             if len(kinds) == 1
             else "Select a result"
@@ -322,7 +322,7 @@ class ResultsView(OwnedView):
         names = "\n".join(lines)
         return (
             f"**All {len(self.matches)} {self.list_title}** · Page {self.index + 1}/{page_count}\n"
-            f"{names}\n\nSelect a name below to view its details."
+            f"{names}\n\n{self.select.placeholder} below to view its details."
         )
 
     def options(self):
