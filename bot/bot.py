@@ -118,7 +118,7 @@ async def info_response(catalog, query, owner, send, level=None):
         await list_response(catalog, LIST_KINDS[query.lower()], owner, send)
         return
     if query.lower() in ("infuser", "infusers"):
-        names = " Â· ".join(
+        names = " · ".join(
             i["name"]
             for i in sorted(catalog.infusers.values(), key=lambda i: i["name"])
         )
@@ -158,7 +158,7 @@ def payload(catalog: Catalog, match: Match, page=0, level=None):
                 path = catalog.image_path(row["image"])
             except (OSError, LibraryError):
                 embed.set_footer(
-                    text=row["footer"] + " Â· Artwork temporarily unavailable"
+                    text=row["footer"] + " · Artwork temporarily unavailable"
                 )
                 embeds.append(embed)
                 continue
@@ -369,7 +369,7 @@ async def lookup_response(catalog, query, owner, send, level=None):
         await send(content="Please use a name shorter than 120 characters.")
         return
     if level is not None and not 1 <= level <= 4:
-        await send(content="Flask levels are 1â€“4.")
+        await send(content="Flask levels are 1–4.")
         return
     matches, exact = catalog.search(query)
     if not matches:
@@ -420,7 +420,7 @@ class BuildView(OwnedView):
                     discord.SelectOption(label=label[:100], value=f"{i}:{start}")
                 )
         self.select = discord.ui.Select(
-            placeholder="View a characterâ€™s flasks and effects", options=options
+            placeholder="View a character’s flasks and effects", options=options
         )
         self.select.callback = self.pick
         self.add_item(self.select)
@@ -490,7 +490,7 @@ class BuildView(OwnedView):
                 if flask["infusers"]:
                     effects = self.infuser_effects(flask["infusers"])
                     embed.add_field(
-                        name="Infusers â€” applied to this flask",
+                        name="Infusers — applied to this flask",
                         value=effects[:1024],
                         inline=False,
                     )
@@ -577,7 +577,7 @@ class FlaskBot(discord.Client):
 
         @group.command(
             name="show",
-            description="Show a flask image and description, or a monsterâ€™s cards.",
+            description="Show a flask image and description, or a monster’s cards.",
         )
         @app_commands.describe(
             query="Flask or monster name",
@@ -699,7 +699,7 @@ class FlaskBot(discord.Client):
 
             @parent.command(
                 name="monster",
-                description="Show a monsterâ€™s flask cards and descriptions.",
+                description="Show a monster’s flask cards and descriptions.",
             )
             @app_commands.checks.cooldown(
                 1, 2.0, key=lambda interaction: interaction.user.id
