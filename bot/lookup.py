@@ -61,6 +61,7 @@ class Catalog:
         self.version = raw["version"]
         self.cards = {c["id"]: c for c in raw["cards"]}
         self.monsters = {m["id"]: m for m in raw["monsters"]}
+        self.events = {event["id"]: event for event in raw.get("events", [])}
         self.infusers = {
             i["id"]: i
             for i in json.loads((self.root / "data/infusers.json").read_text("utf8"))
@@ -69,6 +70,7 @@ class Catalog:
             [Match("card", c) for c in self.cards.values()]
             + [Match("monster", m) for m in self.monsters.values()]
             + [Match("infuser", i) for i in self.infusers.values()]
+            + [Match("event", event) for event in self.events.values()]
         )
         self.by_key = {m.key: m for m in self.matches}
 
@@ -80,7 +82,9 @@ class Catalog:
         if query in self.by_key:
             return [self.by_key[query]], True
         kind = None
-        typed = re.match(r"^(card|flask|monster|infuser|info)\s+(.+)$", query, re.I)
+        typed = re.match(
+            r"^(card|flask|monster|event|infuser|info)\s+(.+)$", query, re.I
+        )
         if typed:
             kind = {"flask": "card"}.get(typed[1].lower(), typed[1].lower())
             query = typed[2]
@@ -90,7 +94,7 @@ class Catalog:
             if kind is None
             or m.kind == kind
             or kind == "info"
-            and m.kind in ("card", "infuser")
+            and m.kind in ("card", "infuser", "monster", "event")
         ]
         needle = normalize(query.lstrip("#"))
         if not needle:
@@ -168,6 +172,24 @@ class Catalog:
         self, match: Match, index: int = 0, level: int | None = None
     ) -> list[dict]:
         """Presentation objects; each becomes one embed and optional attachment."""
+        if match.kind == "event":
+            if level is not None:
+                raise ValueError("Levels apply to flask cards, not events.")
+            event = match.item
+            return [
+                dict(
+                    title=event["name"] + " · Event",
+                    description=event["description"],
+                    image=event.get("image"),
+                    small=False,
+                    fields=(
+                        [("Availability", "Disabled in this game build")]
+                        if event.get("disabled")
+                        else []
+                    ),
+                    footer=f"FLASK Demo {self.version} · Event #{event['id']}",
+                )
+            ]
         if match.kind == "infuser":
             if level is not None:
                 raise ValueError(
@@ -267,10 +289,13 @@ class Catalog:
 
 def parse_message(content: str) -> tuple[str, int | None] | None:
     match = re.match(
-        r"^\s*(?:flask|flash)\s+(show|info|monster)(?:\s+(.*))?\s*$", content, re.I
+        r"^\s*(?:flask|flash)\s+(show|info|monster|event)(?:\s+(.*))?\s*$",
+        content,
+        re.I,
     )
     if not match:
-        return None
+        direct = re.fullmatch(r"\s*(?:flask|flash)\s+(.+?)\s*", content, re.I)
+        return (direct[1], None) if direct else None
     query = (match[2] or "").strip()
     level = None
     suffix = re.search(r"\s+(?:--level|level|lvl)\s*(\d+)\s*$", query, re.I)
@@ -278,10 +303,10 @@ def parse_message(content: str) -> tuple[str, int | None] | None:
         level = int(suffix[1])
         query = query[: suffix.start()].strip()
     if query:
-        if match[1].lower() == "monster":
-            query = "monster " + query
+        if match[1].lower() in ("monster", "event"):
+            query = match[1].lower() + " " + query
         elif match[1].lower() == "info" and not re.match(
-            r"^(?:infuser|card|flask)\s+", query, re.I
+            r"^(?:infuser|card|flask|monster|event)\s+", query, re.I
         ):
             query = "info " + query
     return query, level

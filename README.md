@@ -8,7 +8,7 @@
 | **[Exporter only](https://pocket-cauldron-library.pages.dev/downloads/FLASK-Share-Build-Windows.zip)** | Windows. No Python or token needed. |
 | **[Bot + exporter](https://pocket-cauldron-library.pages.dev/downloads/Pocket-Cauldron-Bot-and-Exporter.zip)** | Both in one ZIP. Python and a token are needed for the bot. |
 
-A Discord bot for FLASK cards, infusers, monsters and shared parties.
+A Discord bot for FLASK cards, infusers, monsters, events and shared parties.
 
 ## Commands
 
@@ -20,6 +20,11 @@ A Discord bot for FLASK cards, infusers, monsters and shared parties.
 | `flask info infuser Shielding` | Show an infuser and its effect. |
 | `flask info infuser` | List all infusers. |
 | `flask monster Burning Witch` | Show a monster's cards. |
+| `flask monsters` | List every monster. |
+| `flask events` | List events. |
+| `flask Witch Cauldron` | Show an event's effects and vendor artwork. |
+| `flask info flasks` | Browse all flask cards. |
+| `flask info monsters` / `flask info events` | Browse monsters or events. |
 | `flask party FB1.…` | Show a shared party. |
 
 Slash commands are also available under `/flask`.
