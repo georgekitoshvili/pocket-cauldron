@@ -24,7 +24,7 @@ HELP = (
     "```text\n"
     "help      Display help and examples.\n"
     "info      Show a flask, infuser, monster, or event.\n"
-    "monsters  List every monster.\n"
+    "monsters  List every monster fight.\n"
     "events    List events and their effects.\n"
     "party     Display a party from a FLASK build code.\n"
     "```\n"
@@ -61,8 +61,8 @@ def help_text(topic=""):
             "Party details include flask levels, multiple infusers, mutations, snacks, HP, and element tokens."
         ),
         "monster": (
-            "**Monsters**\n`flask monsters` or `flask info monsters` lists every monster.\n"
-            "`flask monster Burning Witch` shows its flask cards.\n"
+            "**Monsters**\n`flask monsters` or `flask info monsters` lists every monster fight.\n"
+            "`flask monster Burning Witch` shows every enemy and its flask cards.\n"
             "Select a name from the list to view it."
         ),
         "event": (
@@ -89,7 +89,7 @@ async def list_response(catalog, kind, owner, send):
         (match for match in catalog.matches if match.kind == kind),
         key=lambda match: (match.label.casefold(), match.item["id"]),
     )
-    title = {"card": "flasks", "monster": "monsters", "event": "events"}[kind]
+    title = {"card": "flasks", "monster": "monster fights", "event": "events"}[kind]
     if not matches:
         await send(content=f"No {title} are available in the current library.")
         return
@@ -304,7 +304,7 @@ class ResultsView(OwnedView):
                 value=m.key,
                 description={
                     "card": "Flask card",
-                    "monster": "Monster loadout",
+                    "monster": "Monster fight",
                     "infuser": "Infuser",
                     "event": "Event",
                 }[m.kind]
@@ -696,7 +696,7 @@ class FlaskBot(discord.Client):
                     for m in matches[:25]
                 ]
 
-            @parent.command(name="monsters", description="List every monster.")
+            @parent.command(name="monsters", description="List every monster fight.")
             async def monsters(interaction: discord.Interaction):
                 await list_response(
                     self.catalog,
@@ -800,7 +800,7 @@ class FlaskBot(discord.Client):
 
     async def on_ready(self):
         LOG.info(
-            "Online as %s. Loaded %d cards, %d monsters, %d infusers, and %d events.",
+            "Online as %s. Loaded %d cards, %d monster fights, %d infusers, and %d events.",
             self.user,
             len(self.catalog.cards),
             len(self.catalog.monsters),

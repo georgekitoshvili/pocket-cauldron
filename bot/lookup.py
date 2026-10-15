@@ -37,7 +37,9 @@ class Match:
             if self.kind == "card"
             else (
                 self.item["variants"][0]["name"]
-                if self.kind == "monster" and self.item["variants"]
+                if self.kind == "monster"
+                and not self.item.get("encounter")
+                and self.item["variants"]
                 else ""
             )
         )
@@ -60,7 +62,7 @@ class Catalog:
         raw = json.loads((self.root / "data/catalog.json").read_text("utf8"))
         self.version = raw["version"]
         self.cards = {c["id"]: c for c in raw["cards"]}
-        self.monsters = {m["id"]: m for m in raw["monsters"]}
+        self.monsters = {m["id"]: m for m in raw.get("encounters", raw["monsters"])}
         self.events = {event["id"]: event for event in raw.get("events", [])}
         self.infusers = {
             i["id"]: i
@@ -150,6 +152,8 @@ class Catalog:
     def pages(self, match: Match) -> int:
         if match.kind != "monster":
             return 1
+        if match.item.get("encounter"):
+            return len(self.encounter_pages(match.item))
         return (
             sum(
                 max(1, (len(self.group_cards(v)) + 2) // 3)
@@ -172,6 +176,11 @@ class Catalog:
         self, match: Match, index: int = 0, level: int | None = None
     ) -> list[dict]:
         """Presentation objects; each becomes one embed and optional attachment."""
+        if match.kind == "monster" and match.item.get("encounter"):
+            if level is not None:
+                raise ValueError("Fight flasks use their configured levels.")
+            pages = self.encounter_pages(match.item)
+            return pages[index % len(pages)]
         if match.kind == "event":
             if level is not None:
                 raise ValueError("Levels apply to flask cards, not events.")
@@ -285,6 +294,115 @@ class Catalog:
                 )
             )
         return result
+
+    def encounter_pages(self, encounter: dict) -> list[list[dict]]:
+        pages = []
+        for number, variant in enumerate(encounter["variants"], 1):
+            fields = []
+            details = []
+            for member in variant["members"]:
+                summaries = []
+                for loadout in member["variants"]:
+                    groups = self.group_cards(loadout)
+                    names = [
+                        f"{self.cards[group['id']]['name']} (Lv {group['level']})"
+                        + (
+                            f" ×{len(group['slots'])}"
+                            if len(group["slots"]) > 1
+                            else ""
+                        )
+                        for group in groups
+                    ]
+                    summaries.append(", ".join(names) or "No configured flasks")
+                    health = loadout["health"]
+                    variance = loadout["health_variance"]
+                    notes = []
+                    if health is not None:
+                        notes.append(
+                            f"HP: {health - variance}–{health + variance}"
+                            if variance
+                            else f"HP: {health}"
+                        )
+                    if len(member["variants"]) > 1:
+                        notes.append(loadout["name"] + " · possible loadout")
+                    if loadout["random_order"]:
+                        notes.append("Flask order is randomized.")
+                    if loadout["source"] == "bestiary":
+                        notes.append("Monster-book card list.")
+                    details.append(
+                        dict(
+                            title=f"{member['position']}. {member['name']}",
+                            description="\n".join(notes),
+                            image=member.get("image"),
+                            small=True,
+                            fields=[],
+                            footer=encounter["name"],
+                        )
+                    )
+                    for group in groups:
+                        card = self.cards[group["id"]]
+                        slots = ", ".join(map(str, group["slots"]))
+                        footer = (
+                            f"{member['position']}. {member['name']} · Slots {slots}"
+                        )
+                        if group.get("infusers"):
+                            footer += (
+                                " · Infusers: "
+                                + ", ".join(group["infusers"])
+                                + " · Base values"
+                            )
+                        details.append(
+                            dict(
+                                title=f"{card['name']} · Level {group['level']}"
+                                + (
+                                    f" ×{len(group['slots'])}"
+                                    if len(group["slots"]) > 1
+                                    else ""
+                                ),
+                                description=self.description(card, group["level"]),
+                                image=card["thumbnail"],
+                                small=True,
+                                fields=[],
+                                footer=footer,
+                            )
+                        )
+                summary = "\n".join(
+                    f"Loadout {index}: {text}" if len(summaries) > 1 else text
+                    for index, text in enumerate(summaries, 1)
+                )
+                fields.append(
+                    (f"{member['position']}. {member['name']}", summary[:1024])
+                )
+            header = dict(
+                title=encounter["name"] + " · Monster fight",
+                description="Full enemy lineup and flasks."
+                + (
+                    f" Encounter variant {number}/{len(encounter['variants'])}."
+                    if len(encounter["variants"]) > 1
+                    else ""
+                ),
+                image=None,
+                small=True,
+                fields=fields,
+                footer=f"FLASK Demo {self.version}",
+            )
+            current = [header]
+            for detail in details:
+                if (
+                    len(current) == 10
+                    or sum(self.embed_size(row) for row in [*current, detail]) > 5900
+                ):
+                    pages.append(current)
+                    current = [header]
+                current.append(detail)
+            pages.append(current)
+        return pages
+
+    @staticmethod
+    def embed_size(row: dict) -> int:
+        return sum(
+            len(row.get(key, "")) for key in ("title", "description", "footer")
+        ) + sum(len(name) + len(value) for name, value in row.get("fields", []))
 
 
 def parse_message(content: str) -> tuple[str, int | None] | None:

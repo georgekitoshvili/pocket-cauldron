@@ -19,8 +19,8 @@ A Discord bot for FLASK cards, infusers, monsters, events and shared parties.
 | `flask info Acidburn level 3` | Show a specific card level. |
 | `flask info infuser Shielding` | Show an infuser and its effect. |
 | `flask info infuser` | List all infusers. |
-| `flask monster Burning Witch` | Show a monster's cards. |
-| `flask monsters` | List every monster. |
+| `flask monster Burning Witch` | Show a fight’s full enemy lineup and their flasks. |
+| `flask monsters` | List every monster fight. |
 | `flask events` | List events. |
 | `flask Witch Cauldron` | Show an event's effects and vendor artwork. |
 | `flask info flasks` | Browse all flask cards. |
