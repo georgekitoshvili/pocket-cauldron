@@ -85,10 +85,12 @@ class Catalog:
             return [self.by_key[query]], True
         kind = None
         typed = re.match(
-            r"^(card|flask|monster|event|infuser|info)\s+(.+)$", query, re.I
+            r"^(card|flask|monster|event|encounter|infuser|info)\s+(.+)$", query, re.I
         )
         if typed:
-            kind = {"flask": "card"}.get(typed[1].lower(), typed[1].lower())
+            kind = {"flask": "card", "encounter": "event"}.get(
+                typed[1].lower(), typed[1].lower()
+            )
             query = typed[2]
         candidates = [
             m
@@ -187,11 +189,17 @@ class Catalog:
             event = match.item
             return [
                 dict(
-                    title=event["name"] + " · Event",
+                    title=event["name"]
+                    + (" · Special encounter" if event.get("biome") else " · Event"),
                     description=event["description"],
                     image=event.get("image"),
                     small=False,
                     fields=(
+                        [("Where to encounter", event["location"])]
+                        if event.get("location")
+                        else []
+                    )
+                    + (
                         [("Availability", "Disabled in this game build")]
                         if event.get("disabled")
                         else []
@@ -407,7 +415,7 @@ class Catalog:
 
 def parse_message(content: str) -> tuple[str, int | None] | None:
     match = re.match(
-        r"^\s*(?:flask|flash)\s+(show|info|monster|event)(?:\s+(.*))?\s*$",
+        r"^\s*(?:flask|flash)\s+(show|info|monster|event|encounter)(?:\s+(.*))?\s*$",
         content,
         re.I,
     )
@@ -421,10 +429,10 @@ def parse_message(content: str) -> tuple[str, int | None] | None:
         level = int(suffix[1])
         query = query[: suffix.start()].strip()
     if query:
-        if match[1].lower() in ("monster", "event"):
+        if match[1].lower() in ("monster", "event", "encounter"):
             query = match[1].lower() + " " + query
         elif match[1].lower() == "info" and not re.match(
-            r"^(?:infuser|card|flask|monster|event)\s+", query, re.I
+            r"^(?:infuser|card|flask|monster|event|encounter)\s+", query, re.I
         ):
             query = "info " + query
     return query, level

@@ -22,13 +22,13 @@ LOG = logging.getLogger("flask_bot")
 HELP = (
     "What can I do for you?\n\n"
     "```text\n"
-    "help      Display help and examples.\n"
-    "info      Show a flask, infuser, monster, or event.\n"
-    "monsters  List every monster fight.\n"
-    "events    List events and their effects.\n"
-    "party     Display a party from a FLASK build code.\n"
+    "help        Display help and examples.\n"
+    "info        Show a flask, infuser, fight, or special encounter.\n"
+    "monsters    List every monster fight.\n"
+    "encounters  List special encounters by biome.\n"
+    "party       Display a party from a FLASK build code.\n"
     "```\n"
-    "**Browse:** `flask info flasks` · `flask info monsters` · `flask info events`\n\n"
+    "**Browse:** `flask info flasks` · `flask info monsters` · `flask info encounters`\n\n"
     "**Try:**\n"
     "`flask info Acidburn`\n"
     "`flask info infuser Shielding`\n"
@@ -44,7 +44,7 @@ def help_text(topic=""):
     details = {
         "info": (
             "**info — look up game content**\n"
-            "`flask info flasks` · `flask info monsters` · `flask info events`\n"
+            "`flask info flasks` · `flask info monsters` · `flask info encounters`\n"
             "`flask info Acidburn`\n`flask info Acidburn level 3`\n"
             "`flask info infuser Shielding`\n"
             "`flask info infuser` lists every infuser. Card descriptions show base values."
@@ -66,13 +66,18 @@ def help_text(topic=""):
             "Select a name from the list to view it."
         ),
         "event": (
-            "**Events**\n`flask events` or `flask info events` lists events.\n"
-            "`flask Witch Cauldron` or `flask info Witch Cauldron` shows its effects and vendor artwork."
+            "**Special encounters**\n`flask encounters` or `flask info encounters` lists the two encounters in each biome.\n"
+            "`flask Witch Cauldron` or `flask info Witch Cauldron` shows where it appears, its effects and vendor artwork."
         ),
         "flasks": "**Flasks**\n`flask info flasks` lists every flask. Select a name to see its card and effects.",
         "help": HELP,
     }
-    topic = {"monsters": "monster", "events": "event"}.get(topic, topic)
+    topic = {
+        "monsters": "monster",
+        "events": "event",
+        "encounters": "event",
+        "encounter": "event",
+    }.get(topic, topic)
     return details.get(topic, HELP)
 
 
@@ -81,15 +86,24 @@ LIST_KINDS = {
     "cards": "card",
     "monsters": "monster",
     "events": "event",
+    "encounters": "event",
 }
 
 
 async def list_response(catalog, kind, owner, send):
     matches = sorted(
         (match for match in catalog.matches if match.kind == kind),
-        key=lambda match: (match.label.casefold(), match.item["id"]),
+        key=lambda match: (
+            match.item.get("biome", 0),
+            match.label.casefold(),
+            match.item["id"],
+        ),
     )
-    title = {"card": "flasks", "monster": "monster fights", "event": "events"}[kind]
+    title = {
+        "card": "flasks",
+        "monster": "monster fights",
+        "event": "special encounters",
+    }[kind]
     if not matches:
         await send(content=f"No {title} are available in the current library.")
         return
@@ -115,7 +129,7 @@ async def info_response(catalog, query, owner, send, level=None):
         await send(content=help_text("info"))
         return
     if query not in catalog.by_key and not re.match(
-        r"^(?:infuser|card|flask|monster|event)\s+", query, re.I
+        r"^(?:infuser|card|flask|monster|event|encounter)\s+", query, re.I
     ):
         query = "info " + query
     await lookup_response(catalog, query, owner, send, level)
@@ -256,7 +270,7 @@ class ResultsView(OwnedView):
         self.level = level
         self.index = 0
         self.select = discord.ui.Select(
-            placeholder="Choose a flask, infuser, monster, or event"
+            placeholder="Choose a flask, infuser, fight, or encounter"
         )
         self.select.callback = self.pick
         self.add_item(self.select)
@@ -288,10 +302,15 @@ class ResultsView(OwnedView):
 
     def list_content(self):
         page_count = (len(self.matches) + 24) // 25
-        names = "\n".join(
-            match.label
-            for match in self.matches[self.index * 25 : self.index * 25 + 25]
-        )
+        lines = []
+        previous_biome = None
+        for match in self.matches[self.index * 25 : self.index * 25 + 25]:
+            biome = match.item.get("biome")
+            if biome is not None and biome != previous_biome:
+                lines.append(f"\n**Biome {biome}**")
+                previous_biome = biome
+            lines.append(match.label)
+        names = "\n".join(lines)
         return (
             f"**All {len(self.matches)} {self.list_title}** · Page {self.index + 1}/{page_count}\n"
             f"{names}\n\nSelect a name below to view its details."
@@ -306,7 +325,7 @@ class ResultsView(OwnedView):
                     "card": "Flask card",
                     "monster": "Monster fight",
                     "infuser": "Infuser",
-                    "event": "Event",
+                    "event": "Special encounter",
                 }[m.kind]
                 + f" Â· #{m.item['id']}",
             )
@@ -623,7 +642,7 @@ class FlaskBot(discord.Client):
         def add_commands(parent):
             @parent.command(name="help", description="Show commands and examples.")
             @app_commands.describe(
-                command="Optional command to explain: info, infuser, party, monsters, events"
+                command="Optional command to explain: info, infuser, party, monsters, encounters"
             )
             async def help_command(interaction: discord.Interaction, command: str = ""):
                 await interaction.response.send_message(help_text(command))
@@ -633,7 +652,7 @@ class FlaskBot(discord.Client):
                 description="Look up a flask, infuser, monster, or event, or browse a list.",
             )
             @app_commands.describe(
-                query="Name, infuser <name>, or flasks / monsters / events",
+                query="Name, infuser <name>, or flasks / monsters / encounters",
                 level="Optional flask level",
             )
             @app_commands.checks.cooldown(
@@ -660,7 +679,9 @@ class FlaskBot(discord.Client):
                 query = (
                     current
                     if re.match(
-                        r"^(?:infuser|card|flask|monster|event)\s+", current, re.I
+                        r"^(?:infuser|card|flask|monster|event|encounter)\s+",
+                        current,
+                        re.I,
                     )
                     else "info " + current
                 )
@@ -705,8 +726,10 @@ class FlaskBot(discord.Client):
                     interaction.response.send_message,
                 )
 
-            @parent.command(name="events", description="List all events.")
-            async def events(interaction: discord.Interaction):
+            @parent.command(
+                name="encounters", description="List special encounters by biome."
+            )
+            async def encounters(interaction: discord.Interaction):
                 await list_response(
                     self.catalog,
                     "event",
@@ -715,7 +738,8 @@ class FlaskBot(discord.Client):
                 )
 
             @parent.command(
-                name="event", description="Show an event's effects and vendor artwork."
+                name="encounter",
+                description="Show a special encounter, its biome and vendor artwork.",
             )
             async def event(interaction: discord.Interaction, query: str):
                 await interaction.response.defer(thinking=True)
@@ -800,7 +824,7 @@ class FlaskBot(discord.Client):
 
     async def on_ready(self):
         LOG.info(
-            "Online as %s. Loaded %d cards, %d monster fights, %d infusers, and %d events.",
+            "Online as %s. Loaded %d cards, %d monster fights, %d infusers, and %d special encounters.",
             self.user,
             len(self.catalog.cards),
             len(self.catalog.monsters),
