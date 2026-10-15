@@ -269,9 +269,18 @@ class ResultsView(OwnedView):
         self.list_title = list_title
         self.level = level
         self.index = 0
-        self.select = discord.ui.Select(
-            placeholder="Choose a flask, infuser, fight, or encounter"
+        kinds = {match.kind for match in matches}
+        placeholder = (
+            {
+                "card": "Select a flask",
+                "monster": "Select a monster fight",
+                "infuser": "Select an infuser",
+                "event": "Select an event",
+            }.get(next(iter(kinds)), "Select a result")
+            if len(kinds) == 1
+            else "Select a result"
         )
+        self.select = discord.ui.Select(placeholder=placeholder)
         self.select.callback = self.pick
         self.add_item(self.select)
         if len(matches) > 25:
@@ -321,13 +330,16 @@ class ResultsView(OwnedView):
             discord.SelectOption(
                 label=m.label[:100],
                 value=m.key,
-                description={
-                    "card": "Flask card",
-                    "monster": "Monster fight",
-                    "infuser": "Infuser",
-                    "event": "Special encounter",
-                }[m.kind]
-                + f" Â· #{m.item['id']}",
+                description=(
+                    None
+                    if m.kind == "event"
+                    else {
+                        "card": "Flask card",
+                        "monster": "Monster fight",
+                        "infuser": "Infuser",
+                    }[m.kind]
+                    + f" · #{m.item['id']}"
+                ),
             )
             for m in self.matches[self.index * 25 : self.index * 25 + 25]
         ]

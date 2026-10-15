@@ -189,8 +189,7 @@ class Catalog:
             event = match.item
             return [
                 dict(
-                    title=event["name"]
-                    + (" · Special encounter" if event.get("biome") else " · Event"),
+                    title=event["name"],
                     description=event["description"],
                     image=event.get("image"),
                     small=False,
@@ -204,7 +203,7 @@ class Catalog:
                         if event.get("disabled")
                         else []
                     ),
-                    footer=f"FLASK Demo {self.version} · Event #{event['id']}",
+                    footer=f"FLASK Demo {self.version}",
                 )
             ]
         if match.kind == "infuser":
