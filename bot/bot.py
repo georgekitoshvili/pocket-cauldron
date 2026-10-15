@@ -33,9 +33,10 @@ HELP = (
     "`flask info Acidburn`\n"
     "`flask info infuser Shielding`\n"
     "`flask monster Burning Witch`\n"
-    "`flask Witch Cauldron`\n"
-    "`flask party FB1.…` (paste a full code from FLASK Share Build)\n\n"
-    "Start commands with `flask`. Slash versions are under `/flask`."
+    "`flask Witch Cauldron`\n\n"
+    "Start commands with `flask`. Slash versions are under `/flask`.\n\n"
+    "**How to export a build:**\n"
+    "Open FLASK Share Build, click Copy Build, then paste directly into Discord. That's it."
 )
 
 
@@ -56,7 +57,7 @@ def help_text(topic=""):
         ),
         "party": (
             "**party — show a saved team**\nOpen FLASK Share Build, click Copy Build, "
-            "then paste in Discord.\nThe command is `flask party FB1.…` with the complete code. "
+            "then paste directly into Discord. That's it.\n"
             "You can also attach an exported JSON file with `flask party`.\n"
             "Party details include flask levels, multiple infusers, mutations, snacks, HP, and element tokens."
         ),
