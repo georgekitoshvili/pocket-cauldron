@@ -17,6 +17,8 @@ A Discord bot for FLASK cards, infusers, monster fights, special encounters and 
 | `flask help` | Show help and examples. |
 | `flask info Acidburn` | Show a card and its description. |
 | `flask info Acidburn level 3` | Show a specific card level. |
+| `flask ranger void` | List matching flasks with emoji and descriptions, one per line. |
+| `flask druid` / `flask life` | Filter by any class or element. Use the controls for pages and levels. |
 | `flask info infuser Shielding` | Show an infuser and its effect. |
 | `flask info infuser` | List all infusers. |
 | `flask organs` | List organs and select one to view it. |

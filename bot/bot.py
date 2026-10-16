@@ -13,6 +13,8 @@ from io import BytesIO
 import discord
 from build_protocol import MAX_BUILD_BYTES, decode_build, decode_code
 from builds import BuildCatalog
+from card_emojis import CardEmojis
+from card_filters import CardFilter, card_pages, filter_names, parse_filter
 from discord import app_commands
 from dotenv import load_dotenv
 from library_client import LibraryError
@@ -27,6 +29,7 @@ HELP = (
     "monsters    List every monster fight.\n"
     "encounters  List special encounters by biome.\n"
     "organs      List organs and their effects.\n"
+    "filter      List flasks by class and element.\n"
     "party       Display a party from a FLASK build code.\n"
     "```\n"
     "**Browse:** `flask info flasks` · `flask info monsters` · `flask info encounters` · `flask info organs`\n\n"
@@ -35,7 +38,8 @@ HELP = (
     "`flask info infuser Shielding`\n"
     "`flask monster Burning Witch`\n"
     "`flask Witch Cauldron`\n"
-    "`flask organ Sentinel`\n\n"
+    "`flask organ Sentinel`\n"
+    "`flask ranger void`\n\n"
     "Start commands with `flask`. Slash versions are under `/flask`.\n\n"
     "**How to export a build:**\n"
     "Open FLASK Share Build, click Copy Build, then paste directly into Discord. That's it."
@@ -60,6 +64,11 @@ def help_text(topic=""):
         "organ": (
             "**Organs**\n`flask organs` or `flask info organs` lists all player organs.\n"
             "`flask organ Sentinel` shows its image, effect, team health bonus and class restriction."
+        ),
+        "filter": (
+            "**Filter flasks**\n`flask ranger void` lists Ranger's Void flasks with emoji and descriptions.\n"
+            "Use any class and element, a class alone (`flask druid`), or an element alone (`flask life`).\n"
+            "Change levels with the dropdown or add `level 3`. Slash command: `/flask filter`."
         ),
         "party": (
             "**party — show a saved team**\nOpen FLASK Share Build, click Copy Build, "
@@ -123,7 +132,7 @@ async def list_response(catalog, kind, owner, send):
     await send(content=view.list_content(), view=view)
 
 
-async def info_response(catalog, query, owner, send, level=None):
+async def info_response(catalog, query, owner, send, level=None, emojis=None):
     query = query.strip()
     if query.lower() in LIST_KINDS:
         await list_response(catalog, LIST_KINDS[query.lower()], owner, send)
@@ -139,6 +148,10 @@ async def info_response(catalog, query, owner, send, level=None):
         return
     if not query:
         await send(content=help_text("info"))
+        return
+    selection = parse_filter(catalog, query)
+    if selection is not None:
+        await filter_response(catalog, selection, emojis or {}, owner, send, level)
         return
     if query not in catalog.by_key and not re.match(
         r"^(?:infuser|card|flask|monster|event|encounter|organ|mutation)\s+",
@@ -197,6 +210,78 @@ class OwnedView(discord.ui.View):
             )
             return False
         return True
+
+
+class CardListView(OwnedView):
+    def __init__(self, catalog, selection, emojis, owner, level=None):
+        super().__init__(owner)
+        self.catalog = catalog
+        self.selection = selection
+        self.emojis = emojis
+        self.level = level
+        self.index = 0
+        self.pages = card_pages(catalog, selection, emojis, level)
+        self.previous = discord.ui.Button(label="Previous", row=0)
+        self.next = discord.ui.Button(label="Next", row=0)
+        self.counter = discord.ui.Button(disabled=True, row=0)
+        self.previous.callback = self.backwards
+        self.next.callback = self.forwards
+        for button in (self.previous, self.counter, self.next):
+            self.add_item(button)
+        self.level_select = discord.ui.Select(
+            placeholder="Flask levels",
+            row=1,
+            options=[
+                discord.SelectOption(
+                    label="Base levels", value="0", default=level is None
+                )
+            ]
+            + [
+                discord.SelectOption(
+                    label=f"Level {number}", value=str(number), default=level == number
+                )
+                for number in range(1, 5)
+            ],
+        )
+        self.level_select.callback = self.change_level
+        self.add_item(self.level_select)
+        self.controls()
+
+    def controls(self):
+        self.counter.label = f"{self.index + 1} / {len(self.pages)}"
+        self.previous.disabled = self.next.disabled = len(self.pages) == 1
+
+    async def backwards(self, interaction):
+        self.index = (self.index - 1) % len(self.pages)
+        await self.refresh(interaction)
+
+    async def forwards(self, interaction):
+        self.index = (self.index + 1) % len(self.pages)
+        await self.refresh(interaction)
+
+    async def change_level(self, interaction):
+        value = int(self.level_select.values[0])
+        self.level = value or None
+        self.index = 0
+        self.pages = card_pages(self.catalog, self.selection, self.emojis, self.level)
+        for option in self.level_select.options:
+            option.default = int(option.value) == value
+        await self.refresh(interaction)
+
+    async def refresh(self, interaction):
+        self.controls()
+        await interaction.response.edit_message(
+            content=self.pages[self.index], view=self
+        )
+
+
+async def filter_response(catalog, selection, emojis, owner, send, level=None):
+    try:
+        view = CardListView(catalog, selection, emojis, owner, level)
+    except ValueError as exc:
+        await send(content=str(exc))
+        return
+    await send(content=view.pages[0], view=view)
 
 
 class DetailView(OwnedView):
@@ -583,11 +668,72 @@ class FlaskBot(discord.Client):
         self.build_catalog = BuildCatalog(root=catalog.root, snapshot=catalog.library)
         self.build_lock = asyncio.Lock()
         self.library_task = None
+        self.emoji_task = None
+        self.card_emojis = CardEmojis(self)
         self.tree = app_commands.CommandTree(self)
         self.last_lookup = {}
         group = app_commands.Group(
             name="flask", description="FLASK cards, infusers, monsters, and parties."
         )
+
+        @group.command(
+            name="filter",
+            description="List flasks by class and element with emoji and descriptions.",
+        )
+        @app_commands.describe(
+            character="Character class (optional)",
+            element="Element (optional)",
+            level="Flask level (otherwise base levels)",
+        )
+        @app_commands.checks.cooldown(
+            1, 2.0, key=lambda interaction: interaction.user.id
+        )
+        async def filter_flasks(
+            interaction: discord.Interaction,
+            character: str | None = None,
+            element: str | None = None,
+            level: app_commands.Range[int, 1, 4] | None = None,
+        ):
+            await interaction.response.defer(thinking=True)
+            classes, elements = filter_names(self.catalog)
+            if (character is not None and character not in classes) or (
+                element is not None and element not in elements
+            ):
+                await interaction.followup.send(
+                    "Choose a class or element from the suggestions."
+                )
+                return
+            if character is None and element is None:
+                await interaction.followup.send(
+                    "Choose a class, an element, or both. Example: flask ranger void"
+                )
+                return
+            await filter_response(
+                self.catalog,
+                CardFilter(character, element),
+                self.card_emojis.values,
+                interaction.user.id,
+                interaction.followup.send,
+                level,
+            )
+
+        @filter_flasks.autocomplete("character")
+        async def filter_character_autocomplete(interaction, current: str):
+            classes, _ = filter_names(self.catalog)
+            return [
+                app_commands.Choice(name=name, value=name)
+                for name in classes
+                if current.casefold() in name.casefold()
+            ][:25]
+
+        @filter_flasks.autocomplete("element")
+        async def filter_element_autocomplete(interaction, current: str):
+            _, elements = filter_names(self.catalog)
+            return [
+                app_commands.Choice(name=name, value=name)
+                for name in elements
+                if current.casefold() in name.casefold()
+            ][:25]
 
         @group.command(
             name="show",
@@ -687,6 +833,7 @@ class FlaskBot(discord.Client):
                     interaction.user.id,
                     interaction.followup.send,
                     level,
+                    self.card_emojis.values,
                 )
 
             @info.autocomplete("query")
@@ -831,6 +978,7 @@ class FlaskBot(discord.Client):
         self.tree.on_error = self.command_error
 
     async def setup_hook(self):
+        self.emoji_task = asyncio.create_task(self.card_emojis.sync(self.catalog))
         if self.catalog.library:
             self.library_task = asyncio.create_task(self.refresh_library())
         if self.guild_id:
@@ -859,10 +1007,19 @@ class FlaskBot(discord.Client):
                     catalog.version,
                     snapshot.revision[:12],
                 )
+                if self.emoji_task:
+                    await self.emoji_task
+                self.emoji_task = asyncio.create_task(self.card_emojis.sync(catalog))
             except Exception:
                 LOG.exception("Library refresh failed; keeping the current data.")
 
     async def close(self):
+        if self.emoji_task:
+            self.emoji_task.cancel()
+            try:
+                await self.emoji_task
+            except asyncio.CancelledError:
+                pass
         if self.library_task:
             self.library_task.cancel()
             try:
@@ -963,6 +1120,19 @@ class FlaskBot(discord.Client):
             }
         query, level = request
         try:
+            selection = parse_filter(
+                self.catalog, re.sub(r"^info\s+", "", query, flags=re.I)
+            )
+            if selection is not None:
+                await filter_response(
+                    self.catalog,
+                    selection,
+                    self.card_emojis.values,
+                    message.author.id,
+                    message.channel.send,
+                    level,
+                )
+                return
             await lookup_response(
                 self.catalog, query, message.author.id, message.channel.send, level
             )
