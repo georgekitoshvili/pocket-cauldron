@@ -64,6 +64,7 @@ class Catalog:
         self.cards = {c["id"]: c for c in raw["cards"]}
         self.monsters = {m["id"]: m for m in raw.get("encounters", raw["monsters"])}
         self.events = {event["id"]: event for event in raw.get("events", [])}
+        self.organs = {organ["id"]: organ for organ in raw.get("organs", [])}
         self.infusers = {
             i["id"]: i
             for i in json.loads((self.root / "data/infusers.json").read_text("utf8"))
@@ -73,6 +74,7 @@ class Catalog:
             + [Match("monster", m) for m in self.monsters.values()]
             + [Match("infuser", i) for i in self.infusers.values()]
             + [Match("event", event) for event in self.events.values()]
+            + [Match("organ", organ) for organ in self.organs.values()]
         )
         self.by_key = {m.key: m for m in self.matches}
 
@@ -85,10 +87,12 @@ class Catalog:
             return [self.by_key[query]], True
         kind = None
         typed = re.match(
-            r"^(card|flask|monster|event|encounter|infuser|info)\s+(.+)$", query, re.I
+            r"^(card|flask|monster|event|encounter|infuser|organ|mutation|info)\s+(.+)$",
+            query,
+            re.I,
         )
         if typed:
-            kind = {"flask": "card", "encounter": "event"}.get(
+            kind = {"flask": "card", "encounter": "event", "mutation": "organ"}.get(
                 typed[1].lower(), typed[1].lower()
             )
             query = typed[2]
@@ -98,7 +102,7 @@ class Catalog:
             if kind is None
             or m.kind == kind
             or kind == "info"
-            and m.kind in ("card", "infuser", "monster", "event")
+            and m.kind in ("card", "infuser", "monster", "event", "organ")
         ]
         needle = normalize(query.lstrip("#"))
         if not needle:
@@ -178,6 +182,30 @@ class Catalog:
         self, match: Match, index: int = 0, level: int | None = None
     ) -> list[dict]:
         """Presentation objects; each becomes one embed and optional attachment."""
+        if match.kind == "organ":
+            if level is not None:
+                raise ValueError("Organs have fixed effects, not flask levels.")
+            organ = match.item
+            classes = organ["classes"]
+            restriction = (
+                "All classes" if len(classes) == 5 else ", ".join(classes) + " only"
+            )
+            return [
+                dict(
+                    title=organ["name"],
+                    description=organ["description"],
+                    image=organ["image"],
+                    small=False,
+                    fields=[
+                        ("Class restriction", restriction),
+                        (
+                            "Team health bonus",
+                            f"+{organ['health_bonus']} HP to every teammate",
+                        ),
+                    ],
+                    footer=f"FLASK Demo {self.version}",
+                )
+            ]
         if match.kind == "monster" and match.item.get("encounter"):
             if level is not None:
                 raise ValueError("Fight flasks use their configured levels.")
@@ -414,7 +442,7 @@ class Catalog:
 
 def parse_message(content: str) -> tuple[str, int | None] | None:
     match = re.match(
-        r"^\s*(?:flask|flash)\s+(show|info|monster|event|encounter)(?:\s+(.*))?\s*$",
+        r"^\s*(?:flask|flash)\s+(show|info|monster|event|encounter|organ|mutation)(?:\s+(.*))?\s*$",
         content,
         re.I,
     )
@@ -428,10 +456,12 @@ def parse_message(content: str) -> tuple[str, int | None] | None:
         level = int(suffix[1])
         query = query[: suffix.start()].strip()
     if query:
-        if match[1].lower() in ("monster", "event", "encounter"):
+        if match[1].lower() in ("monster", "event", "encounter", "organ", "mutation"):
             query = match[1].lower() + " " + query
         elif match[1].lower() == "info" and not re.match(
-            r"^(?:infuser|card|flask|monster|event|encounter)\s+", query, re.I
+            r"^(?:infuser|card|flask|monster|event|encounter|organ|mutation)\s+",
+            query,
+            re.I,
         ):
             query = "info " + query
     return query, level

@@ -23,17 +23,19 @@ HELP = (
     "What can I do for you?\n\n"
     "```text\n"
     "help        Display help and examples.\n"
-    "info        Show a flask, infuser, fight, or special encounter.\n"
+    "info        Show a flask, infuser, fight, encounter, or organ.\n"
     "monsters    List every monster fight.\n"
     "encounters  List special encounters by biome.\n"
+    "organs      List organs and their effects.\n"
     "party       Display a party from a FLASK build code.\n"
     "```\n"
-    "**Browse:** `flask info flasks` · `flask info monsters` · `flask info encounters`\n\n"
+    "**Browse:** `flask info flasks` · `flask info monsters` · `flask info encounters` · `flask info organs`\n\n"
     "**Try:**\n"
     "`flask info Acidburn`\n"
     "`flask info infuser Shielding`\n"
     "`flask monster Burning Witch`\n"
-    "`flask Witch Cauldron`\n\n"
+    "`flask Witch Cauldron`\n"
+    "`flask organ Sentinel`\n\n"
     "Start commands with `flask`. Slash versions are under `/flask`.\n\n"
     "**How to export a build:**\n"
     "Open FLASK Share Build, click Copy Build, then paste directly into Discord. That's it."
@@ -54,6 +56,10 @@ def help_text(topic=""):
             "**Infusers**\n`flask info infuser Shielding` shows its icon and effect.\n"
             "`flask info infuser` lists all infusers. Party results keep each infuser "
             "attached to its flask; base effects and infuser effects are shown separately."
+        ),
+        "organ": (
+            "**Organs**\n`flask organs` or `flask info organs` lists all player organs.\n"
+            "`flask organ Sentinel` shows its image, effect, team health bonus and class restriction."
         ),
         "party": (
             "**party — show a saved team**\nOpen FLASK Share Build, click Copy Build, "
@@ -78,6 +84,8 @@ def help_text(topic=""):
         "events": "event",
         "encounters": "event",
         "encounter": "event",
+        "organs": "organ",
+        "mutations": "organ",
     }.get(topic, topic)
     return details.get(topic, HELP)
 
@@ -88,6 +96,8 @@ LIST_KINDS = {
     "monsters": "monster",
     "events": "event",
     "encounters": "event",
+    "organs": "organ",
+    "mutations": "organ",
 }
 
 
@@ -104,6 +114,7 @@ async def list_response(catalog, kind, owner, send):
         "card": "flasks",
         "monster": "monster fights",
         "event": "special encounters",
+        "organ": "organs",
     }[kind]
     if not matches:
         await send(content=f"No {title} are available in the current library.")
@@ -130,7 +141,9 @@ async def info_response(catalog, query, owner, send, level=None):
         await send(content=help_text("info"))
         return
     if query not in catalog.by_key and not re.match(
-        r"^(?:infuser|card|flask|monster|event|encounter)\s+", query, re.I
+        r"^(?:infuser|card|flask|monster|event|encounter|organ|mutation)\s+",
+        query,
+        re.I,
     ):
         query = "info " + query
     await lookup_response(catalog, query, owner, send, level)
@@ -277,6 +290,7 @@ class ResultsView(OwnedView):
                 "monster": "Select a monster fight",
                 "infuser": "Select an infuser",
                 "event": "Select an encounter",
+                "organ": "Select an organ",
             }.get(next(iter(kinds)), "Select a result")
             if len(kinds) == 1
             else "Select a result"
@@ -374,7 +388,7 @@ async def lookup_response(catalog, query, owner, send, level=None):
     matches, exact = catalog.search(query)
     if not matches:
         await send(
-            content="Exact match not found. No similar flasks, infusers, monsters, or events found. Try a shorter name."
+            content="Exact match not found. No similar flasks, infusers, monster fights, encounters, or organs found. Try a shorter name."
         )
         return
     if exact and len(matches) == 1:
@@ -645,7 +659,7 @@ class FlaskBot(discord.Client):
         def add_commands(parent):
             @parent.command(name="help", description="Show commands and examples.")
             @app_commands.describe(
-                command="Optional command to explain: info, infuser, party, monsters, encounters"
+                command="Optional command to explain: info, infuser, party, monsters, encounters, organs"
             )
             async def help_command(interaction: discord.Interaction, command: str = ""):
                 await interaction.response.send_message(help_text(command))
@@ -655,7 +669,7 @@ class FlaskBot(discord.Client):
                 description="Look up a flask, infuser, monster, or event, or browse a list.",
             )
             @app_commands.describe(
-                query="Name, infuser <name>, or flasks / monsters / encounters",
+                query="Name, organ <name>, infuser <name>, or flasks / monsters / encounters / organs",
                 level="Optional flask level",
             )
             @app_commands.checks.cooldown(
@@ -682,7 +696,7 @@ class FlaskBot(discord.Client):
                 query = (
                     current
                     if re.match(
-                        r"^(?:infuser|card|flask|monster|event|encounter)\s+",
+                        r"^(?:infuser|card|flask|monster|event|encounter|organ|mutation)\s+",
                         current,
                         re.I,
                     )
@@ -728,6 +742,38 @@ class FlaskBot(discord.Client):
                     interaction.user.id,
                     interaction.response.send_message,
                 )
+
+            @parent.command(name="organs", description="List organs and their effects.")
+            async def organs(interaction: discord.Interaction):
+                await list_response(
+                    self.catalog,
+                    "organ",
+                    interaction.user.id,
+                    interaction.response.send_message,
+                )
+
+            @parent.command(
+                name="organ",
+                description="Show an organ's effect, image and class restriction.",
+            )
+            async def organ(interaction: discord.Interaction, query: str):
+                await interaction.response.defer(thinking=True)
+                await lookup_response(
+                    self.catalog,
+                    "organ " + query,
+                    interaction.user.id,
+                    interaction.followup.send,
+                )
+
+            @organ.autocomplete("query")
+            async def organ_autocomplete(interaction, current: str):
+                matches, _ = self.catalog.search("organ " + current)
+                return [
+                    app_commands.Choice(
+                        name=match.label[:100], value=str(match.item["id"])
+                    )
+                    for match in matches[:25]
+                ]
 
             @parent.command(
                 name="encounters", description="List special encounters by biome."
@@ -827,12 +873,13 @@ class FlaskBot(discord.Client):
 
     async def on_ready(self):
         LOG.info(
-            "Online as %s. Loaded %d cards, %d monster fights, %d infusers, and %d special encounters.",
+            "Online as %s. Loaded %d cards, %d monster fights, %d infusers, %d special encounters, and %d organs.",
             self.user,
             len(self.catalog.cards),
             len(self.catalog.monsters),
             len(self.catalog.infusers),
             len(self.catalog.events),
+            len(self.catalog.organs),
         )
 
     async def command_error(self, interaction, error):

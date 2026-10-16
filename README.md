@@ -19,6 +19,8 @@ A Discord bot for FLASK cards, infusers, monster fights, special encounters and 
 | `flask info Acidburn level 3` | Show a specific card level. |
 | `flask info infuser Shielding` | Show an infuser and its effect. |
 | `flask info infuser` | List all infusers. |
+| `flask organs` | List organs and select one to view it. |
+| `flask organ Sentinel` | Show its image, effect, team health bonus and class restriction. |
 | `flask monster Burning Witch` | Show a fight’s full enemy lineup and their flasks. |
 | `flask monsters` | List every monster fight. |
 | `flask encounters` | List the two special encounters in each biome. |
