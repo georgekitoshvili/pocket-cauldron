@@ -126,7 +126,7 @@ def help_text(topic=""):
         ),
         "monster": (
             "**Monsters**\n`flask monsters` or `flask info monsters` lists every monster fight.\n"
-            "`flask monster Burning Witch` shows every enemy and its flask cards.\n"
+            "`flask monster Burning Witch` shows every enemy, its mutation and flask cards, including changing forms where applicable.\n"
             "Select a name from the list to view it."
         ),
         "event": (
