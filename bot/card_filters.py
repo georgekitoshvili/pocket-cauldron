@@ -24,6 +24,7 @@ KEYWORD_ALIASES = {
     "Gamble": ("gamble", "gambling"),
     "Luck": ("luck",),
     "Kunai": ("kunai",),
+    "Totem": ("totem", "totems"),
     "Exhaust": ("exhaust",),
     "Armor": ("armor", "armour"),
     "Lock": ("lock", "locked"),
@@ -35,6 +36,7 @@ KEYWORD_ALIASES = {
 }
 
 KEYWORD_PATTERNS = {
+    "Totem": r"\btotems?\b",
     "Burn": r"\bburn(?:ed|s|ing)?\b",
     "Poison": r"\bpoison(?:ed|s|ing)?\b",
     "Spikes": r"\b(?:spikes?|thorns?)\b",

@@ -111,7 +111,7 @@ def help_text(topic=""):
             "**Filter flasks**\n`flask ranger void` lists Ranger's Void flasks with emoji and descriptions.\n"
             "Use any class and element, a class alone (`flask druid`), or an element alone (`flask life`).\n"
             "Filter keywords with `flask ranger strength`, `flask poison`, or `flask ranger void luck`.\n"
-            "Keywords: Strength, Burn, Poison, Control, Spikes/Thorns, Stealth, Chain, Echo, Gamble/Gambling, Luck, Kunai, Exhaust, Armor, Lock, Eternal, Flourish, Regrowth, Burst and Bolstering.\n"
+            "Keywords: Strength, Burn, Poison, Control, Spikes/Thorns, Stealth, Chain, Echo, Gamble/Gambling, Luck, Kunai, Totem/Totems, Exhaust, Armor, Lock, Eternal, Flourish, Regrowth, Burst and Bolstering.\n"
             "Stealth also includes Strength-reducing effects. Use `-strength` for those effects alone.\n"
             "Change levels with the dropdown or add `level 3`. Slash command: `/flask filter`."
             "\n`flask druid starting 4` lists only flasks whose lowest available level is 4. "
