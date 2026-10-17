@@ -13,6 +13,7 @@ from pathlib import Path
 from library_client import LibraryClient
 
 ROOT = Path(__file__).resolve().parent
+UNRELEASED_CLASSES = frozenset({"Warlock"})
 
 
 def normalize(text: str) -> str:
@@ -61,7 +62,12 @@ class Catalog:
         self.root = self.library.root if self.library else Path(root)
         raw = json.loads((self.root / "data/catalog.json").read_text("utf8"))
         self.version = raw["version"]
-        self.cards = {c["id"]: c for c in raw["cards"]}
+        self.cards = {
+            c["id"]: c
+            for c in raw["cards"]
+            if c.get("character") not in UNRELEASED_CLASSES
+            and c.get("is_available", True)
+        }
         self.monsters = {m["id"]: m for m in raw.get("encounters", raw["monsters"])}
         self.events = {event["id"]: event for event in raw.get("events", [])}
         self.organs = {organ["id"]: organ for organ in raw.get("organs", [])}
