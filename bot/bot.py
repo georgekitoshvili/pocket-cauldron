@@ -8,6 +8,7 @@ import logging
 import os
 import re
 import time
+from dataclasses import replace
 from io import BytesIO
 
 import discord
@@ -113,6 +114,8 @@ def help_text(topic=""):
             "Keywords: Strength, Burn, Poison, Control, Spikes/Thorns, Stealth, Chain, Echo, Gamble/Gambling, Luck, Kunai, Exhaust, Armor, Lock, Eternal, Flourish, Regrowth, Burst and Bolstering.\n"
             "Stealth also includes Strength-reducing effects. Use `-strength` for those effects alone.\n"
             "Change levels with the dropdown or add `level 3`. Slash command: `/flask filter`."
+            "\n`flask druid starting 4` lists only flasks whose lowest available level is 4. "
+            "Use the separate **Starts at level…** dropdown to filter; **Display level** changes the stats shown."
         ),
         "party": (
             "**party — show a saved team**\nOpen FLASK Share Build, click Copy Build, "
@@ -193,7 +196,11 @@ async def info_response(catalog, query, owner, send, level=None, emojis=None):
     if not query:
         await send(content=help_text("info"))
         return
-    selection = parse_filter(catalog, query)
+    try:
+        selection = parse_filter(catalog, query)
+    except ValueError as exc:
+        await send(content=str(exc))
+        return
     if selection is not None:
         await filter_response(catalog, selection, emojis or {}, owner, send, level)
         return
@@ -428,7 +435,7 @@ class CardListView(OwnedView):
         for button in (self.previous, self.counter, self.next):
             self.add_item(button)
         self.level_select = discord.ui.Select(
-            placeholder="Flask levels",
+            placeholder="Display level",
             row=1,
             options=[
                 discord.SelectOption(
@@ -444,6 +451,27 @@ class CardListView(OwnedView):
         )
         self.level_select.callback = self.change_level
         self.add_item(self.level_select)
+        self.starting_select = discord.ui.Select(
+            placeholder="Starts at level…",
+            row=2,
+            options=[
+                discord.SelectOption(
+                    label="Starting level: All",
+                    value="0",
+                    default=selection.starting_level is None,
+                )
+            ]
+            + [
+                discord.SelectOption(
+                    label=f"Starts at level {number}",
+                    value=str(number),
+                    default=selection.starting_level == number,
+                )
+                for number in range(1, 5)
+            ],
+        )
+        self.starting_select.callback = self.change_starting_level
+        self.add_item(self.starting_select)
         self.controls()
 
     def controls(self):
@@ -464,6 +492,15 @@ class CardListView(OwnedView):
         self.index = 0
         self.pages = card_pages(self.catalog, self.selection, self.emojis, self.level)
         for option in self.level_select.options:
+            option.default = int(option.value) == value
+        await self.refresh(interaction)
+
+    async def change_starting_level(self, interaction):
+        value = int(self.starting_select.values[0])
+        self.selection = replace(self.selection, starting_level=value or None)
+        self.index = 0
+        self.pages = card_pages(self.catalog, self.selection, self.emojis, self.level)
+        for option in self.starting_select.options:
             option.default = int(option.value) == value
         await self.refresh(interaction)
 
@@ -884,6 +921,7 @@ class FlaskBot(discord.Client):
             element="Element (optional)",
             keyword="Keyword or status (optional)",
             level="Flask level (otherwise base levels)",
+            starting_level="Only flasks whose lowest available level is exactly this level",
         )
         @app_commands.checks.cooldown(
             1, 2.0, key=lambda interaction: interaction.user.id
@@ -894,6 +932,7 @@ class FlaskBot(discord.Client):
             element: str | None = None,
             level: app_commands.Range[int, 1, 4] | None = None,
             keyword: str | None = None,
+            starting_level: app_commands.Range[int, 1, 4] | None = None,
         ):
             await interaction.response.defer(thinking=True)
             classes, elements = filter_names(self.catalog)
@@ -910,14 +949,19 @@ class FlaskBot(discord.Client):
                     "Choose a class or element from the suggestions."
                 )
                 return
-            if character is None and element is None and keyword is None:
+            if (
+                character is None
+                and element is None
+                and keyword is None
+                and starting_level is None
+            ):
                 await interaction.followup.send(
                     "Choose a class, element or keyword. Example: flask ranger strength"
                 )
                 return
             await filter_response(
                 self.catalog,
-                CardFilter(character, element, resolved_keyword),
+                CardFilter(character, element, resolved_keyword, starting_level),
                 self.card_emojis.values,
                 interaction.user.id,
                 interaction.followup.send,
@@ -1520,6 +1564,8 @@ class FlaskBot(discord.Client):
                 "Cannot send lookup in channel %s: check Send Messages, Embed Links, and Attach Files permissions.",
                 message.channel.id,
             )
+        except ValueError as exc:
+            await message.channel.send(str(exc))
 
 
 def main():

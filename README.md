@@ -18,6 +18,7 @@ A Discord bot for FLASK cards, infusers, monster fights, special encounters and 
 | `flask info Acidburn` | Show a card and its description. |
 | `flask info Acidburn level 3` | Show a specific card level. |
 | `flask ranger void` | List matching flasks with emoji and descriptions, one per line. |
+| `flask druid starting 4` | Only Druid flasks that start at level 4. Also available in the separate “Starts at level…” dropdown. |
 | `flask ranger strength` | Filter by class and keyword. Also works with `flask poison` or `flask ranger void luck`. |
 | `flask druid` / `flask life` | Filter by any class or element. Use the controls for pages and levels. |
 | `flask info infuser Shielding` | Show an infuser and its effect. |

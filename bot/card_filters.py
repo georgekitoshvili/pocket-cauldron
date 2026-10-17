@@ -1,7 +1,7 @@
 """Class, element and keyword filters with compact, plain-text card pages."""
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from discord.utils import escape_markdown
 from lookup import normalize
@@ -89,12 +89,18 @@ class CardFilter:
     character: str | None = None
     element: str | None = None
     keyword: str | None = None
+    starting_level: int | None = None
 
     @property
     def label(self):
-        return " · ".join(
+        label = " · ".join(
             value for value in (self.character, self.element, self.keyword) if value
         )
+        if self.starting_level is not None:
+            return " · ".join(
+                filter(None, (label, f"Starts at level {self.starting_level}"))
+            )
+        return label
 
 
 def filter_names(catalog):
@@ -108,6 +114,16 @@ def filter_names(catalog):
 
 
 def parse_filter(catalog, query):
+    starting = re.search(r"\bstarting\s+(?:level\s+)?(\d+)\b", query, re.I)
+    if starting:
+        number = int(starting[1])
+        if number not in range(1, 5):
+            raise ValueError("Starting levels are 1–4.")
+        remainder = (query[: starting.start()] + " " + query[starting.end() :]).strip()
+        selection = parse_filter(catalog, remainder) if remainder else CardFilter()
+        if selection is not None:
+            return replace(selection, starting_level=number)
+        return None
     needle = filter_key(query)
     if not needle:
         return None
@@ -145,6 +161,10 @@ def parse_filter(catalog, query):
 def filtered_cards(catalog, selection, level=None):
     if level is not None and level not in range(1, 5):
         raise ValueError("Flask levels are 1–4.")
+    if selection.starting_level is not None and selection.starting_level not in range(
+        1, 5
+    ):
+        raise ValueError("Starting levels are 1–4.")
     return sorted(
         (
             card
@@ -154,6 +174,10 @@ def filtered_cards(catalog, selection, level=None):
                 or card.get("character") == selection.character
             )
             and (selection.element is None or selection.element in card["elements"])
+            and (
+                selection.starting_level is None
+                or card["available_level"] == selection.starting_level
+            )
             and (level is None or str(level) in card["descriptions"])
             and (
                 selection.keyword is None
@@ -173,7 +197,7 @@ def card_pages(catalog, selection, emojis, level=None):
     cards = filtered_cards(catalog, selection, level)
     heading = f"**{selection.label} · {len(cards)} flasks**\n\n"
     if not cards:
-        return [heading + "No matching flasks at this level."]
+        return [heading + "No matching flasks for these filters and display level."]
     pages = []
     rows = []
     for card in cards:
