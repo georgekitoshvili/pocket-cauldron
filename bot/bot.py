@@ -28,6 +28,7 @@ from discord import app_commands
 from dotenv import load_dotenv
 from library_client import LibraryError
 from lookup import ROOT, Catalog, Match, parse_message
+from monster_cards import monster_pages
 from party_ideas import THEMES, explain_pages, random_pages
 
 LOG = logging.getLogger("flask_bot")
@@ -157,7 +158,7 @@ LIST_KINDS = {
 }
 
 
-async def list_response(catalog, kind, owner, send):
+async def list_response(catalog, kind, owner, send, emojis=None):
     matches = sorted(
         (match for match in catalog.matches if match.kind == kind),
         key=lambda match: (
@@ -175,14 +176,14 @@ async def list_response(catalog, kind, owner, send):
     if not matches:
         await send(content=f"No {title} are available in the current library.")
         return
-    view = ResultsView(catalog, matches, owner, list_title=title)
+    view = ResultsView(catalog, matches, owner, list_title=title, emojis=emojis)
     await send(content=view.list_content(), view=view)
 
 
 async def info_response(catalog, query, owner, send, level=None, emojis=None):
     query = query.strip()
     if query.lower() in LIST_KINDS:
-        await list_response(catalog, LIST_KINDS[query.lower()], owner, send)
+        await list_response(catalog, LIST_KINDS[query.lower()], owner, send, emojis)
         return
     if query.lower() in ("infuser", "infusers"):
         names = " · ".join(
@@ -210,14 +211,16 @@ async def info_response(catalog, query, owner, send, level=None, emojis=None):
         re.I,
     ):
         query = "info " + query
-    await lookup_response(catalog, query, owner, send, level)
+    await lookup_response(catalog, query, owner, send, level, emojis)
 
 
-async def monster_response(catalog, query, owner, send):
+async def monster_response(catalog, query, owner, send, emojis=None):
     if not query.strip():
-        await list_response(catalog, "monster", owner, send)
+        await list_response(catalog, "monster", owner, send, emojis)
         return
-    await lookup_response(catalog, "monster " + query.strip(), owner, send)
+    await lookup_response(
+        catalog, "monster " + query.strip(), owner, send, emojis=emojis
+    )
 
 
 def payload(catalog: Catalog, match: Match, page=0, level=None):
@@ -597,12 +600,14 @@ class ResultsView(OwnedView):
         owner: int,
         level=None,
         list_title=None,
+        emojis=None,
     ):
         super().__init__(owner)
         self.catalog = catalog
         self.matches = matches
         self.list_title = list_title
         self.level = level
+        self.emojis = emojis if emojis is not None else {}
         self.index = 0
         kinds = {match.kind for match in matches}
         placeholder = (
@@ -673,6 +678,20 @@ class ResultsView(OwnedView):
     async def pick(self, interaction):
         match = self.catalog.by_key[self.select.values[0]]
         await interaction.response.defer()
+        if match.kind == "monster":
+            try:
+                view = AdviceView(
+                    monster_pages(self.catalog, match.item, self.emojis, self.level),
+                    self.owner,
+                )
+            except ValueError as exc:
+                await interaction.followup.send(str(exc), ephemeral=True)
+                return
+            await interaction.edit_original_response(
+                content=view.content(), embeds=[], attachments=[], view=view
+            )
+            self.stop()
+            return
         try:
             embeds, files = await asyncio.to_thread(
                 payload, self.catalog, match, level=self.level
@@ -691,11 +710,11 @@ class ResultsView(OwnedView):
                 file.close()
 
 
-async def lookup_response(catalog, query, owner, send, level=None):
+async def lookup_response(catalog, query, owner, send, level=None, emojis=None):
     query = query.strip()
     list_query = re.sub(r"^info\s+", "", query, flags=re.I).lower()
     if list_query in LIST_KINDS:
-        await list_response(catalog, LIST_KINDS[list_query], owner, send)
+        await list_response(catalog, LIST_KINDS[list_query], owner, send, emojis)
         return
     if not query:
         await send(content=HELP)
@@ -713,6 +732,16 @@ async def lookup_response(catalog, query, owner, send, level=None):
         )
         return
     if exact and len(matches) == 1:
+        if matches[0].kind == "monster":
+            try:
+                view = AdviceView(
+                    monster_pages(catalog, matches[0].item, emojis or {}, level), owner
+                )
+            except ValueError as exc:
+                await send(content=str(exc))
+                return
+            await send(content=view.content(), view=view)
+            return
         try:
             embeds, files = await asyncio.to_thread(
                 payload, catalog, matches[0], level=level
@@ -733,7 +762,7 @@ async def lookup_response(catalog, query, owner, send, level=None):
                 if exact
                 else f"Exact match not found. {len(matches)} similar results. Choose one below:"
             ),
-            view=ResultsView(catalog, matches, owner, level),
+            view=ResultsView(catalog, matches, owner, level, emojis=emojis),
         )
 
 
@@ -1021,6 +1050,7 @@ class FlaskBot(discord.Client):
                 interaction.user.id,
                 interaction.followup.send,
                 level,
+                self.card_emojis.values,
             )
 
         @show.autocomplete("query")
@@ -1131,7 +1161,11 @@ class FlaskBot(discord.Client):
             async def monster(interaction: discord.Interaction, query: str = ""):
                 await interaction.response.defer(thinking=True)
                 await monster_response(
-                    self.catalog, query, interaction.user.id, interaction.followup.send
+                    self.catalog,
+                    query,
+                    interaction.user.id,
+                    interaction.followup.send,
+                    self.card_emojis.values,
                 )
 
             @monster.autocomplete("query")
@@ -1151,6 +1185,7 @@ class FlaskBot(discord.Client):
                     "monster",
                     interaction.user.id,
                     interaction.response.send_message,
+                    self.card_emojis.values,
                 )
 
             @parent.command(name="organs", description="List organs and their effects.")
@@ -1498,6 +1533,7 @@ class FlaskBot(discord.Client):
                     short_request[2] or "",
                     message.author.id,
                     message.channel.send,
+                    emojis=self.card_emojis.values,
                 )
             else:
                 await monster_response(
@@ -1505,6 +1541,7 @@ class FlaskBot(discord.Client):
                     short_request[2] or "",
                     message.author.id,
                     message.channel.send,
+                    self.card_emojis.values,
                 )
             return
         build_request = re.fullmatch(
@@ -1557,7 +1594,12 @@ class FlaskBot(discord.Client):
                 )
                 return
             await lookup_response(
-                self.catalog, query, message.author.id, message.channel.send, level
+                self.catalog,
+                query,
+                message.author.id,
+                message.channel.send,
+                level,
+                self.card_emojis.values,
             )
         except discord.Forbidden:
             LOG.warning(

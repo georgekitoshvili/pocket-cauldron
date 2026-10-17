@@ -25,7 +25,7 @@ A Discord bot for FLASK cards, infusers, monster fights, special encounters and 
 | `flask info infuser` | List all infusers. |
 | `flask organs` | List organs and select one to view it. |
 | `flask organ Sentinel` | Show its image, effect, team health bonus and class restriction. |
-| `flask monster Burning Witch` | Show a fight’s full enemy lineup and their flasks. |
+| `flask monster Burning Witch` | Show flask emojis and descriptions, grouped under each monster in the fight. |
 | `flask monsters` | List every monster fight. |
 | `flask encounters` | List the two special encounters in each biome. |
 | `flask Witch Cauldron` | Show its biome, effects and vendor artwork. |
