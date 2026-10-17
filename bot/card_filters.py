@@ -23,6 +23,7 @@ KEYWORD_ALIASES = {
     "Echo": ("echo",),
     "Gamble": ("gamble", "gambling"),
     "Luck": ("luck",),
+    "Kunai": ("kunai",),
     "Exhaust": ("exhaust",),
     "Armor": ("armor", "armour"),
     "Lock": ("lock", "locked"),
