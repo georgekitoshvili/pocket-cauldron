@@ -11,6 +11,7 @@ import time
 from io import BytesIO
 
 import discord
+from advice import combo_lines, message_pages, order_pages
 from build_protocol import MAX_BUILD_BYTES, decode_build, decode_code
 from builds import BuildCatalog
 from card_emojis import CardEmojis
@@ -37,6 +38,8 @@ HELP = (
     "encounters  List special encounters by biome.\n"
     "organs      List organs and their effects.\n"
     "filter      List flasks by class, element or keyword.\n"
+    "combo       Find setup partners for a flask.\n"
+    "order       Suggest an order for your exported build.\n"
     "party       Display a party from a FLASK build code.\n"
     "```\n"
     "**Browse:** `flask info flasks` · `flask info monsters` · `flask info encounters` · `flask info organs`\n\n"
@@ -48,6 +51,8 @@ HELP = (
     "`flask organ Sentinel`\n"
     "`flask ranger void`\n"
     "`flask ranger strength`\n\n"
+    "`flask combo Wildfire`\n"
+    "`flask order FB1.…`\n\n"
     "Start commands with `flask`. Slash versions are under `/flask`.\n\n"
     "**How to export a build:**\n"
     "Open FLASK Share Build, click Copy Build, then paste directly into Discord. That's it."
@@ -57,6 +62,18 @@ HELP = (
 def help_text(topic=""):
     topic = topic.strip().lower()
     details = {
+        "combo": (
+            "**combo — find supporting flasks**\n"
+            "`flask combo Wildfire` or `flask combo Explosion! level 4`\n"
+            "Shows setup partners and explains the interaction. Suggestions use released flasks only."
+        ),
+        "order": (
+            "**order — suggest flask ordering**\n"
+            "`flask order FB1.…` or attach your exported JSON with `flask order`.\n"
+            "You can paste the complete copied command after `flask order`, too.\n"
+            "Suggests buff/debuff setup before payoffs, preserving empty slots and attached infusers. "
+            "Complex timing stays unchanged. This is advice, not a battle simulator or game import."
+        ),
         "info": (
             "**info — look up game content**\n"
             "`flask info flasks` · `flask info monsters` · `flask info encounters`\n"
@@ -221,6 +238,122 @@ class OwnedView(discord.ui.View):
             )
             return False
         return True
+
+
+class AdviceView(OwnedView):
+    def __init__(self, pages, owner):
+        super().__init__(owner)
+        self.pages = pages
+        self.index = 0
+        self.previous = discord.ui.Button(label="Previous", disabled=True)
+        self.next = discord.ui.Button(label="Next", disabled=len(pages) <= 1)
+        self.previous.callback = self.backwards
+        self.next.callback = self.forwards
+        self.add_item(self.previous)
+        self.add_item(self.next)
+
+    def content(self):
+        return self.pages[self.index] + f"\n\nPage {self.index + 1}/{len(self.pages)}"
+
+    async def change(self, interaction, amount):
+        self.index = max(0, min(len(self.pages) - 1, self.index + amount))
+        self.previous.disabled = self.index == 0
+        self.next.disabled = self.index == len(self.pages) - 1
+        await interaction.response.edit_message(content=self.content(), view=self)
+
+    async def backwards(self, interaction):
+        await self.change(interaction, -1)
+
+    async def forwards(self, interaction):
+        await self.change(interaction, 1)
+
+
+class ComboChoiceView(OwnedView):
+    def __init__(self, catalog, matches, emojis, owner, level):
+        super().__init__(owner)
+        selection = discord.ui.Select(
+            placeholder="Select a flask",
+            options=[
+                discord.SelectOption(label=match.item["name"][:100], value=match.key)
+                for match in matches[:25]
+            ],
+        )
+
+        async def selected(interaction):
+            await interaction.response.defer()
+            match = catalog.by_key[selection.values[0]]
+            try:
+                pages = message_pages(combo_lines(catalog, match.item, emojis, level))
+            except ValueError as exc:
+                await interaction.followup.send(str(exc), ephemeral=True)
+                return
+            view = AdviceView(pages, owner)
+            await interaction.edit_original_response(content=view.content(), view=view)
+
+        selection.callback = selected
+        self.add_item(selection)
+
+
+async def combo_response(catalog, query, emojis, owner, send, level=None):
+    if level is not None and level not in range(1, 5):
+        await send(content="Choose a flask level from 1 to 4.")
+        return
+    if not query.strip():
+        await send(content=help_text("combo"))
+        return
+    matches, exact = catalog.search(
+        query if query.startswith("card:") else "flask " + query
+    )
+    matches = [match for match in matches if match.kind == "card"]
+    if not matches:
+        await send(
+            content="No matching released flask found. Try `flask combo Wildfire`."
+        )
+    elif exact and len(matches) == 1:
+        try:
+            view = AdviceView(
+                message_pages(combo_lines(catalog, matches[0].item, emojis, level)),
+                owner,
+            )
+        except ValueError as exc:
+            await send(content=str(exc))
+            return
+        await send(content=view.content(), view=view)
+    else:
+        await send(
+            content=(
+                "Exact match not found. Select a flask for combo suggestions:"
+                if not exact
+                else "Select a flask for combo suggestions:"
+            ),
+            view=ComboChoiceView(catalog, matches, emojis, owner, level),
+        )
+
+
+async def order_response(catalog, build_catalog, attachment, code, emojis, owner, send):
+    code = (code or "").strip().strip("`").strip()
+    code = re.sub(r"^(?:flask|flash)\s+(?:party|build|deck)\s+", "", code, flags=re.I)
+    if not code and attachment is None:
+        await send(content=help_text("order"))
+        return
+    if not code and (
+        attachment.size > MAX_BUILD_BYTES
+        or not attachment.filename.lower().endswith(".json")
+    ):
+        await send(
+            content="Attach an exported build JSON file smaller than 128 KB. Full game saves are not accepted."
+        )
+        return
+    try:
+        build = decode_code(code) if code else decode_build(await attachment.read())
+        pages = await asyncio.to_thread(
+            order_pages, build, catalog, build_catalog, emojis
+        )
+    except (ValueError, OSError) as exc:
+        await send(content=str(exc))
+        return
+    view = AdviceView(pages, owner)
+    await send(content=view.content(), view=view)
 
 
 class CardListView(OwnedView):
@@ -1004,6 +1137,64 @@ class FlaskBot(discord.Client):
                         code,
                     )
 
+        @group.command(
+            name="combo",
+            description="Find supporting flasks and explain their interactions.",
+        )
+        @app_commands.checks.cooldown(
+            1, 3.0, key=lambda interaction: interaction.user.id
+        )
+        async def combo(
+            interaction: discord.Interaction,
+            query: str,
+            level: app_commands.Range[int, 1, 4] | None = None,
+        ):
+            await interaction.response.defer(thinking=True)
+            await combo_response(
+                self.catalog,
+                query,
+                self.card_emojis.values,
+                interaction.user.id,
+                interaction.followup.send,
+                level,
+            )
+
+        @combo.autocomplete("query")
+        async def combo_autocomplete(interaction, current: str):
+            matches, _ = self.catalog.search("flask " + current)
+            return [
+                app_commands.Choice(name=m.item["name"][:100], value=m.key)
+                for m in matches[:25]
+                if m.kind == "card"
+            ]
+
+        @group.command(
+            name="order", description="Suggest flask ordering for an exported party."
+        )
+        @app_commands.describe(
+            code="FB1. code or the complete copied flask party command",
+            file="Exported build JSON instead of a code",
+        )
+        @app_commands.checks.cooldown(
+            1, 5.0, key=lambda interaction: interaction.user.id
+        )
+        async def order(
+            interaction: discord.Interaction,
+            code: str | None = None,
+            file: discord.Attachment | None = None,
+        ):
+            await interaction.response.defer(thinking=True)
+            async with self.build_lock:
+                await order_response(
+                    self.catalog,
+                    self.build_catalog,
+                    file,
+                    code,
+                    self.card_emojis.values,
+                    interaction.user.id,
+                    interaction.followup.send,
+                )
+
         add_commands(group)
         self.tree.add_command(group)
         self.tree.on_error = self.command_error
@@ -1092,6 +1283,43 @@ class FlaskBot(discord.Client):
         )
         if help_request:
             await message.channel.send(help_text(help_request[1] or ""))
+            return
+        advice_request = re.fullmatch(
+            r"\s*(?:flask|flash)\s+(combo|order)(?:\s+([\s\S]*?))?\s*",
+            message.content,
+            re.I,
+        )
+        if advice_request:
+            now = time.monotonic()
+            if now - self.last_lookup.get(message.author.id, 0) < 3:
+                return
+            self.last_lookup[message.author.id] = now
+            try:
+                if advice_request[1].lower() == "combo":
+                    query, level = parse_message(
+                        "flask show " + (advice_request[2] or "")
+                    )
+                    await combo_response(
+                        self.catalog,
+                        query,
+                        self.card_emojis.values,
+                        message.author.id,
+                        message.channel.send,
+                        level,
+                    )
+                else:
+                    async with self.build_lock:
+                        await order_response(
+                            self.catalog,
+                            self.build_catalog,
+                            message.attachments[0] if message.attachments else None,
+                            advice_request[2],
+                            self.card_emojis.values,
+                            message.author.id,
+                            message.channel.send,
+                        )
+            except discord.Forbidden:
+                LOG.warning("Cannot send advice: check channel permissions.")
             return
         short_request = re.fullmatch(
             r"\s*(?:flask|flash)\s+(info|monster)(?:\s+(.*))?\s*", message.content, re.I
