@@ -1,19 +1,99 @@
-"""Class and element filters with compact, plain-text card pages."""
+"""Class, element and keyword filters with compact, plain-text card pages."""
 
+import re
 from dataclasses import dataclass
 
 from discord.utils import escape_markdown
 from lookup import normalize
+
+KEYWORD_ALIASES = {
+    "Strength": ("strength",),
+    "Burn": ("burn",),
+    "Poison": ("poison",),
+    "Control": ("control",),
+    "Spikes": ("spikes", "spike", "thorns", "thorn"),
+    "Stealth": ("stealth",),
+    "Negative Strength": (
+        "negative strength",
+        "-strength",
+        "minus strength",
+        "strength reduction",
+    ),
+    "Chain": ("chain",),
+    "Echo": ("echo",),
+    "Gamble": ("gamble", "gambling"),
+    "Luck": ("luck",),
+    "Exhaust": ("exhaust",),
+    "Armor": ("armor", "armour"),
+    "Lock": ("lock", "locked"),
+    "Eternal": ("eternal", "ethernal"),
+    "Flourish": ("flourish", "regen", "regenerate", "regeneration"),
+    "Regrowth": ("regrowth", "regrow"),
+    "Burst": ("burst",),
+    "Bolstering": ("bolstering", "bolster"),
+}
+
+KEYWORD_PATTERNS = {
+    "Burn": r"\bburn(?:ed|s|ing)?\b",
+    "Poison": r"\bpoison(?:ed|s|ing)?\b",
+    "Spikes": r"\b(?:spikes?|thorns?)\b",
+    "Chain": r"\bchain(?:ed|s)?\b",
+    "Echo": r"\becho(?:ed|es)?\b",
+    "Gamble": r"\bgambl(?:e[sd]?|ing)\b",
+    "Exhaust": r"\bexhaust(?:ed|s|ing)?\b",
+    "Armor": r"\barmou?r\b",
+    "Lock": r"\b(?:un)?lock(?:ed|s|ing)?\b",
+}
+
+
+def filter_key(text):
+    return normalize(
+        re.sub(r"(?<!\w)[-−]\s*strength\b", "negative strength", text, flags=re.I)
+    )
+
+
+def resolve_keyword(text):
+    needle = filter_key(text)
+    for keyword, aliases in KEYWORD_ALIASES.items():
+        if needle in {filter_key(alias) for alias in (keyword, *aliases)}:
+            return keyword
+    return None
+
+
+def reduces_strength(text):
+    return bool(
+        re.search(
+            r"[-−]\s*(?:\d+(?:\.\d+)?|X)\s*%?\s*strength\b"
+            r"|\b(?:lose|loses|remove|removes|steal|steals)\s+(?:all\s+|\d+\s+|your\s+|their\s+)*strength\b"
+            r"|\b(?:reduce|reduces|decrease|decreases)\s+(?:(?:all|your|their|enemy)\s+)*strength\b"
+            r"|\bstrength\s+(?:is|gets)\s+(?:reduced|decreased)\b",
+            text,
+            re.I,
+        )
+    )
+
+
+def matches_keyword(catalog, card, keyword, level):
+    text = catalog.description(card, level)
+    if keyword == "Negative Strength":
+        return reduces_strength(text)
+    if keyword == "Stealth" and reduces_strength(text):
+        return True
+    pattern = KEYWORD_PATTERNS.get(keyword, rf"\b{re.escape(keyword)}\b")
+    return bool(re.search(pattern, text, re.I))
 
 
 @dataclass(frozen=True)
 class CardFilter:
     character: str | None = None
     element: str | None = None
+    keyword: str | None = None
 
     @property
     def label(self):
-        return " · ".join(value for value in (self.character, self.element) if value)
+        return " · ".join(
+            value for value in (self.character, self.element, self.keyword) if value
+        )
 
 
 def filter_names(catalog):
@@ -27,7 +107,7 @@ def filter_names(catalog):
 
 
 def parse_filter(catalog, query):
-    needle = normalize(query)
+    needle = filter_key(query)
     if not needle:
         return None
     classes, elements = filter_names(catalog)
@@ -43,6 +123,21 @@ def parse_filter(catalog, query):
     for element in elements:
         if needle == normalize(element):
             return CardFilter(element=element)
+    for keyword, aliases in KEYWORD_ALIASES.items():
+        for alias in aliases:
+            alias_key = filter_key(alias)
+            if needle == alias_key:
+                return CardFilter(keyword=keyword)
+            if alias_key not in needle:
+                continue
+            remainder = needle.replace(alias_key, "", 1)
+            for character in (None, *classes):
+                for element in (None, *elements):
+                    if (character or element) and remainder in (
+                        normalize((character or "") + (element or "")),
+                        normalize((element or "") + (character or "")),
+                    ):
+                        return CardFilter(character, element, keyword)
     return None
 
 
@@ -59,6 +154,15 @@ def filtered_cards(catalog, selection, level=None):
             )
             and (selection.element is None or selection.element in card["elements"])
             and (level is None or str(level) in card["descriptions"])
+            and (
+                selection.keyword is None
+                or matches_keyword(
+                    catalog,
+                    card,
+                    selection.keyword,
+                    card["available_level"] if level is None else level,
+                )
+            )
         ),
         key=lambda card: (card["name"].casefold(), card["id"]),
     )

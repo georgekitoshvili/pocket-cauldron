@@ -14,7 +14,14 @@ import discord
 from build_protocol import MAX_BUILD_BYTES, decode_build, decode_code
 from builds import BuildCatalog
 from card_emojis import CardEmojis
-from card_filters import CardFilter, card_pages, filter_names, parse_filter
+from card_filters import (
+    KEYWORD_ALIASES,
+    CardFilter,
+    card_pages,
+    filter_names,
+    parse_filter,
+    resolve_keyword,
+)
 from discord import app_commands
 from dotenv import load_dotenv
 from library_client import LibraryError
@@ -29,7 +36,7 @@ HELP = (
     "monsters    List every monster fight.\n"
     "encounters  List special encounters by biome.\n"
     "organs      List organs and their effects.\n"
-    "filter      List flasks by class and element.\n"
+    "filter      List flasks by class, element or keyword.\n"
     "party       Display a party from a FLASK build code.\n"
     "```\n"
     "**Browse:** `flask info flasks` · `flask info monsters` · `flask info encounters` · `flask info organs`\n\n"
@@ -39,7 +46,8 @@ HELP = (
     "`flask monster Burning Witch`\n"
     "`flask Witch Cauldron`\n"
     "`flask organ Sentinel`\n"
-    "`flask ranger void`\n\n"
+    "`flask ranger void`\n"
+    "`flask ranger strength`\n\n"
     "Start commands with `flask`. Slash versions are under `/flask`.\n\n"
     "**How to export a build:**\n"
     "Open FLASK Share Build, click Copy Build, then paste directly into Discord. That's it."
@@ -68,6 +76,9 @@ def help_text(topic=""):
         "filter": (
             "**Filter flasks**\n`flask ranger void` lists Ranger's Void flasks with emoji and descriptions.\n"
             "Use any class and element, a class alone (`flask druid`), or an element alone (`flask life`).\n"
+            "Filter keywords with `flask ranger strength`, `flask poison`, or `flask ranger void luck`.\n"
+            "Keywords: Strength, Burn, Poison, Control, Spikes/Thorns, Stealth, Chain, Echo, Gamble/Gambling, Luck, Exhaust, Armor, Lock, Eternal, Flourish, Regrowth, Burst and Bolstering.\n"
+            "Stealth also includes Strength-reducing effects. Use `-strength` for those effects alone.\n"
             "Change levels with the dropdown or add `level 3`. Slash command: `/flask filter`."
         ),
         "party": (
@@ -678,11 +689,12 @@ class FlaskBot(discord.Client):
 
         @group.command(
             name="filter",
-            description="List flasks by class and element with emoji and descriptions.",
+            description="List flasks by class, element or keyword with emoji and descriptions.",
         )
         @app_commands.describe(
             character="Character class (optional)",
             element="Element (optional)",
+            keyword="Keyword or status (optional)",
             level="Flask level (otherwise base levels)",
         )
         @app_commands.checks.cooldown(
@@ -693,9 +705,16 @@ class FlaskBot(discord.Client):
             character: str | None = None,
             element: str | None = None,
             level: app_commands.Range[int, 1, 4] | None = None,
+            keyword: str | None = None,
         ):
             await interaction.response.defer(thinking=True)
             classes, elements = filter_names(self.catalog)
+            resolved_keyword = resolve_keyword(keyword) if keyword is not None else None
+            if keyword is not None and resolved_keyword is None:
+                await interaction.followup.send(
+                    "Choose a keyword from the suggestions."
+                )
+                return
             if (character is not None and character not in classes) or (
                 element is not None and element not in elements
             ):
@@ -703,14 +722,14 @@ class FlaskBot(discord.Client):
                     "Choose a class or element from the suggestions."
                 )
                 return
-            if character is None and element is None:
+            if character is None and element is None and keyword is None:
                 await interaction.followup.send(
-                    "Choose a class, an element, or both. Example: flask ranger void"
+                    "Choose a class, element or keyword. Example: flask ranger strength"
                 )
                 return
             await filter_response(
                 self.catalog,
-                CardFilter(character, element),
+                CardFilter(character, element, resolved_keyword),
                 self.card_emojis.values,
                 interaction.user.id,
                 interaction.followup.send,
@@ -733,6 +752,18 @@ class FlaskBot(discord.Client):
                 app_commands.Choice(name=name, value=name)
                 for name in elements
                 if current.casefold() in name.casefold()
+            ][:25]
+
+        @filter_flasks.autocomplete("keyword")
+        async def filter_keyword_autocomplete(interaction, current: str):
+            resolved = resolve_keyword(current)
+            return [
+                app_commands.Choice(name=name, value=name)
+                for name, aliases in sorted(KEYWORD_ALIASES.items())
+                if name == resolved
+                or any(
+                    current.casefold() in alias.casefold() for alias in (name, *aliases)
+                )
             ][:25]
 
         @group.command(
