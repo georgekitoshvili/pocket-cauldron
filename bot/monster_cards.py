@@ -73,7 +73,7 @@ def monster_pages(catalog, monster, emojis, level=None):
                     rows.append(row)
                 if not rows:
                     rows = ["No configured flasks."]
-                section = "\n\n────────\n" + heading
+                section = "\n\n" + heading
                 if len(current) + len(section) + len(rows[0]) + 2 > 1850:
                     if current != title:
                         pages.append(current)
