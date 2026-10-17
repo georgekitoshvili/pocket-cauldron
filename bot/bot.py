@@ -27,6 +27,7 @@ from discord import app_commands
 from dotenv import load_dotenv
 from library_client import LibraryError
 from lookup import ROOT, Catalog, Match, parse_message
+from party_ideas import THEMES, explain_pages, random_pages
 
 LOG = logging.getLogger("flask_bot")
 HELP = (
@@ -40,6 +41,8 @@ HELP = (
     "filter      List flasks by class, element or keyword.\n"
     "combo       Find setup partners for a flask.\n"
     "order       Suggest an order for your exported build.\n"
+    "explain     Explain your exported party and its interactions.\n"
+    "random      Generate a themed build challenge.\n"
     "party       Display a party from a FLASK build code.\n"
     "```\n"
     "**Browse:** `flask info flasks` · `flask info monsters` · `flask info encounters` · `flask info organs`\n\n"
@@ -53,6 +56,7 @@ HELP = (
     "`flask ranger strength`\n\n"
     "`flask combo Wildfire`\n"
     "`flask order FB1.…`\n\n"
+    "`flask random rogue`\n\n"
     "Start commands with `flask`. Slash versions are under `/flask`.\n\n"
     "**How to export a build:**\n"
     "Open FLASK Share Build, click Copy Build, then paste directly into Discord. That's it."
@@ -62,6 +66,18 @@ HELP = (
 def help_text(topic=""):
     topic = topic.strip().lower()
     details = {
+        "explain": (
+            "**explain — understand a shared party**\n"
+            "`flask explain FB1.…` or attach an exported JSON with `flask explain`.\n"
+            "You can paste the full copied `flask party FB1.…` command after `flask explain`.\n"
+            "Shows flask roles, recognized interactions, organs, infusers and cautions. Base effects are explained; battle outcomes are not simulated."
+        ),
+        "random": (
+            "**random — try a build challenge**\n"
+            "`flask random` or `flask random rogue`\n"
+            "Themes: Explosion, Poison, Shield, Spikes and Bullets. Any released class also works.\n"
+            "Generates three different classes with four compatible flasks each and optional organs. Press Reroll for another idea. Assemble it in game; it is not an import code or a guaranteed win."
+        ),
         "combo": (
             "**combo — find supporting flasks**\n"
             "`flask combo Wildfire` or `flask combo Explosion! level 4`\n"
@@ -330,11 +346,13 @@ async def combo_response(catalog, query, emojis, owner, send, level=None):
         )
 
 
-async def order_response(catalog, build_catalog, attachment, code, emojis, owner, send):
+async def build_advice_response(
+    catalog, build_catalog, attachment, code, emojis, owner, send, mode="order"
+):
     code = (code or "").strip().strip("`").strip()
     code = re.sub(r"^(?:flask|flash)\s+(?:party|build|deck)\s+", "", code, flags=re.I)
     if not code and attachment is None:
-        await send(content=help_text("order"))
+        await send(content=help_text(mode))
         return
     if not code and (
         attachment.size > MAX_BUILD_BYTES
@@ -347,12 +365,49 @@ async def order_response(catalog, build_catalog, attachment, code, emojis, owner
     try:
         build = decode_code(code) if code else decode_build(await attachment.read())
         pages = await asyncio.to_thread(
-            order_pages, build, catalog, build_catalog, emojis
+            explain_pages if mode == "explain" else order_pages,
+            build,
+            catalog,
+            build_catalog,
+            emojis,
         )
     except (ValueError, OSError) as exc:
         await send(content=str(exc))
         return
     view = AdviceView(pages, owner)
+    await send(content=view.content(), view=view)
+
+
+async def order_response(catalog, build_catalog, attachment, code, emojis, owner, send):
+    await build_advice_response(
+        catalog, build_catalog, attachment, code, emojis, owner, send
+    )
+
+
+class RandomBuildView(AdviceView):
+    def __init__(self, catalog, emojis, owner, theme=""):
+        self.catalog = catalog
+        self.emojis = emojis
+        self.theme = theme
+        super().__init__(random_pages(catalog, emojis, theme), owner)
+        button = discord.ui.Button(label="Reroll", style=discord.ButtonStyle.primary)
+        button.callback = self.reroll
+        self.add_item(button)
+
+    async def reroll(self, interaction):
+        self.pages = random_pages(self.catalog, self.emojis, self.theme)
+        self.index = 0
+        self.previous.disabled = True
+        self.next.disabled = len(self.pages) <= 1
+        await interaction.response.edit_message(content=self.content(), view=self)
+
+
+async def random_response(catalog, emojis, owner, send, theme=""):
+    try:
+        view = RandomBuildView(catalog, emojis, owner, theme)
+    except ValueError as exc:
+        await send(content=str(exc))
+        return
     await send(content=view.content(), view=view)
 
 
@@ -1195,6 +1250,62 @@ class FlaskBot(discord.Client):
                     interaction.followup.send,
                 )
 
+        @group.command(
+            name="explain",
+            description="Explain a shared party's flasks, interactions and cautions.",
+        )
+        @app_commands.describe(
+            code="FB1. code or the complete copied flask party command",
+            file="Exported build JSON instead of a code",
+        )
+        @app_commands.checks.cooldown(
+            1, 5.0, key=lambda interaction: interaction.user.id
+        )
+        async def explain(
+            interaction: discord.Interaction,
+            code: str | None = None,
+            file: discord.Attachment | None = None,
+        ):
+            await interaction.response.defer(thinking=True)
+            async with self.build_lock:
+                await build_advice_response(
+                    self.catalog,
+                    self.build_catalog,
+                    file,
+                    code,
+                    self.card_emojis.values,
+                    interaction.user.id,
+                    interaction.followup.send,
+                    "explain",
+                )
+
+        @group.command(
+            name="random",
+            description="Generate a themed three-character build challenge.",
+        )
+        @app_commands.checks.cooldown(
+            1, 3.0, key=lambda interaction: interaction.user.id
+        )
+        async def random_build(interaction: discord.Interaction, theme: str = ""):
+            await interaction.response.defer(thinking=True)
+            await random_response(
+                self.catalog,
+                self.card_emojis.values,
+                interaction.user.id,
+                interaction.followup.send,
+                theme,
+            )
+
+        @random_build.autocomplete("theme")
+        async def random_theme_autocomplete(interaction, current: str):
+            return [
+                app_commands.Choice(
+                    name=f"{theme.name} · {theme.character}", value=theme.name
+                )
+                for theme in THEMES
+                if current.casefold() in f"{theme.name} {theme.character}".casefold()
+            ]
+
         add_commands(group)
         self.tree.add_command(group)
         self.tree.on_error = self.command_error
@@ -1285,7 +1396,7 @@ class FlaskBot(discord.Client):
             await message.channel.send(help_text(help_request[1] or ""))
             return
         advice_request = re.fullmatch(
-            r"\s*(?:flask|flash)\s+(combo|order)(?:\s+([\s\S]*?))?\s*",
+            r"\s*(?:flask|flash)\s+(combo|order|explain|random)(?:\s+([\s\S]*?))?\s*",
             message.content,
             re.I,
         )
@@ -1307,9 +1418,17 @@ class FlaskBot(discord.Client):
                         message.channel.send,
                         level,
                     )
+                elif advice_request[1].lower() == "random":
+                    await random_response(
+                        self.catalog,
+                        self.card_emojis.values,
+                        message.author.id,
+                        message.channel.send,
+                        advice_request[2] or "",
+                    )
                 else:
                     async with self.build_lock:
-                        await order_response(
+                        await build_advice_response(
                             self.catalog,
                             self.build_catalog,
                             message.attachments[0] if message.attachments else None,
@@ -1317,6 +1436,7 @@ class FlaskBot(discord.Client):
                             self.card_emojis.values,
                             message.author.id,
                             message.channel.send,
+                            advice_request[1].lower(),
                         )
             except discord.Forbidden:
                 LOG.warning("Cannot send advice: check channel permissions.")
