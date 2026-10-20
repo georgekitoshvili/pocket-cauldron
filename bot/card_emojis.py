@@ -102,31 +102,45 @@ class CardEmojis:
                     sum(card["id"] in self.values for card, _ in desired),
                     len(desired),
                 )
-                for element in element_entries(catalog):
+                artwork = [
+                    ("element", element["name"], element)
+                    for element in element_entries(catalog)
+                ] + [
+                    (
+                        "organ",
+                        str(organ["id"]),
+                        {"id": organ["id"], "thumbnail": organ["image"]},
+                    )
+                    for organ in getattr(catalog, "organs", {}).values()
+                    if organ.get("image")
+                ]
+                for kind, key, entry in artwork:
                     name = (
-                        await asyncio.to_thread(emoji_name, catalog, element)
-                    ).replace("flask_", "element_", 1)
+                        await asyncio.to_thread(emoji_name, catalog, entry)
+                    ).replace("flask_", kind + "_", 1)
                     emoji = names.get(name)
                     if emoji is None:
                         if count >= 2000:
                             LOG.warning(
-                                "Application emoji capacity reached; elements use text labels."
+                                "Application emoji capacity reached; remaining icons use fallbacks."
                             )
                             break
-                        raw = await asyncio.to_thread(emoji_image, catalog, element)
+                        raw = await asyncio.to_thread(emoji_image, catalog, entry)
                         emoji = await self.client.create_application_emoji(
                             name=name, image=raw
                         )
                         names[name] = emoji
                         count += 1
-                    self.values["element:" + element["name"]] = str(emoji)
-                LOG.info(
-                    "Element emoji sync complete: %d.",
-                    sum(
-                        isinstance(key, str) and key.startswith("element:")
-                        for key in self.values
-                    ),
-                )
+                    self.values[kind + ":" + key] = str(emoji)
+                for kind in ("element", "organ"):
+                    LOG.info(
+                        "%s emoji sync complete: %d.",
+                        kind.title(),
+                        sum(
+                            isinstance(key, str) and key.startswith(kind + ":")
+                            for key in self.values
+                        ),
+                    )
             except (discord.HTTPException, OSError, ValueError):
                 LOG.exception(
                     "Flask emoji sync failed; existing emoji and text lookups remain available."

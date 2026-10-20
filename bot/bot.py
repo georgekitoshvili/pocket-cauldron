@@ -161,14 +161,15 @@ def organ_character(catalog, query):
     return None
 
 
-def result_line(match):
+def result_line(match, emojis=None):
     if match.kind != "organ":
         return match.label
     description = " ".join(match.item["description"].split())
+    icon = (emojis or {}).get("organ:" + str(match.item["id"]), "🫀")
     return (
-        f"**{discord.utils.escape_markdown(match.label)}** — "
-        f"{discord.utils.escape_markdown(description)} · "
-        f"**Team: +{match.item['health_bonus']} HP each**"
+        f"{icon} **{discord.utils.escape_markdown(match.label)}** · "
+        f"❤️ +{match.item['health_bonus']} team HP each\n"
+        f"{discord.utils.escape_markdown(description)}"
     )
 
 
@@ -631,12 +632,17 @@ class ResultsView(OwnedView):
         self.level = level
         self.emojis = emojis if emojis is not None else {}
         self.index = 0
+        self.organ_list = bool(list_title) and all(
+            match.kind == "organ" for match in matches
+        )
         self.result_pages = []
         page = []
         size = 0
         for match in matches:
-            line_size = len(result_line(match)) + 1
-            if page and (len(page) == 25 or size + line_size > 1700):
+            line_size = len(result_line(match, self.emojis)) + 2
+            if page and (
+                len(page) == (8 if self.organ_list else 25) or size + line_size > 1700
+            ):
                 self.result_pages.append(page)
                 page = []
                 size = 0
@@ -657,13 +663,21 @@ class ResultsView(OwnedView):
             else "Select a result"
         )
         self.select = None
-        if not (list_title and kinds == {"organ"}):
+        if not self.organ_list:
             self.select = discord.ui.Select(placeholder=placeholder)
             self.select.callback = self.pick
             self.add_item(self.select)
         if len(self.result_pages) > 1:
-            prev = discord.ui.Button(label="Previous results", row=1)
-            nxt = discord.ui.Button(label="More results", row=1)
+            prev = discord.ui.Button(
+                label="Previous" if self.organ_list else "Previous results", row=1
+            )
+            nxt = discord.ui.Button(
+                label="Next" if self.organ_list else "More results", row=1
+            )
+            if self.organ_list:
+                self.organ_previous = prev
+                self.organ_next = nxt
+                self.organ_counter = discord.ui.Button(disabled=True, row=1)
 
             async def backwards(interaction):
                 self.index = (self.index - 1) % len(self.result_pages)
@@ -684,6 +698,8 @@ class ResultsView(OwnedView):
             prev.callback = backwards
             nxt.callback = forwards
             self.add_item(prev)
+            if self.organ_list:
+                self.add_item(self.organ_counter)
             self.add_item(nxt)
         self.options()
 
@@ -696,7 +712,10 @@ class ResultsView(OwnedView):
             if biome is not None and biome != previous_biome:
                 lines.append(f"\n**Biome {biome}**")
                 previous_biome = biome
-            lines.append(result_line(match))
+            lines.append(result_line(match, self.emojis))
+        if self.organ_list:
+            title = self.list_title[0].upper() + self.list_title[1:]
+            return f"**{title} · {len(self.matches)} total**\n\n" + "\n\n".join(lines)
         names = "\n".join(lines)
         content = f"**All {len(self.matches)} {self.list_title}** · Page {self.index + 1}/{page_count}\n{names}"
         if self.select is not None:
@@ -704,6 +723,10 @@ class ResultsView(OwnedView):
         return content
 
     def options(self):
+        if hasattr(self, "organ_counter"):
+            self.organ_counter.label = f"{self.index + 1}/{len(self.result_pages)}"
+            self.organ_previous.disabled = self.index == 0
+            self.organ_next.disabled = self.index == len(self.result_pages) - 1
         if self.select is None:
             return
         self.select.options = [
