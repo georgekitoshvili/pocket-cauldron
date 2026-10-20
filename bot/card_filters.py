@@ -27,7 +27,7 @@ KEYWORD_ALIASES = {
     "Totem": ("totem", "totems"),
     "Exhaust": ("exhaust",),
     "Armor": ("armor", "armour"),
-    "Strike": ("strike", "strikes"),
+    "Damage": ("damage", "strike", "strikes"),
     "Shield": ("shield", "shields"),
     "Lock": ("lock", "locked"),
     "Eternal": ("eternal", "ethernal"),
@@ -47,7 +47,6 @@ KEYWORD_PATTERNS = {
     "Gamble": r"\bgambl(?:e[sd]?|ing)\b",
     "Exhaust": r"\bexhaust(?:ed|s|ing)?\b",
     "Armor": r"\barmou?r\b",
-    "Strike": r"\bstrikes?\b",
     "Shield": r"\bshields?\b",
     "Lock": r"\b(?:un)?lock(?:ed|s|ing)?\b",
 }
