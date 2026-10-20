@@ -630,7 +630,7 @@ class ResultsView(OwnedView):
         self.matches = matches
         self.list_title = list_title
         self.level = level
-        self.emojis = emojis if emojis is not None else {}
+        self.emojis = emojis if emojis is not None else getattr(catalog, "emoji_values", {})
         self.index = 0
         self.organ_list = bool(list_title) and all(
             match.kind == "organ" for match in matches
