@@ -165,7 +165,11 @@ def result_line(match):
     if match.kind != "organ":
         return match.label
     description = " ".join(match.item["description"].split())
-    return f"**{discord.utils.escape_markdown(match.label)}** — {discord.utils.escape_markdown(description)}"
+    return (
+        f"**{discord.utils.escape_markdown(match.label)}** — "
+        f"{discord.utils.escape_markdown(description)} · "
+        f"**Team: +{match.item['health_bonus']} HP each**"
+    )
 
 
 async def list_response(catalog, kind, owner, send, emojis=None, character=None):
@@ -652,9 +656,11 @@ class ResultsView(OwnedView):
             if len(kinds) == 1
             else "Select a result"
         )
-        self.select = discord.ui.Select(placeholder=placeholder)
-        self.select.callback = self.pick
-        self.add_item(self.select)
+        self.select = None
+        if not (list_title and kinds == {"organ"}):
+            self.select = discord.ui.Select(placeholder=placeholder)
+            self.select.callback = self.pick
+            self.add_item(self.select)
         if len(self.result_pages) > 1:
             prev = discord.ui.Button(label="Previous results", row=1)
             nxt = discord.ui.Button(label="More results", row=1)
@@ -692,12 +698,14 @@ class ResultsView(OwnedView):
                 previous_biome = biome
             lines.append(result_line(match))
         names = "\n".join(lines)
-        return (
-            f"**All {len(self.matches)} {self.list_title}** · Page {self.index + 1}/{page_count}\n"
-            f"{names}\n\n{self.select.placeholder} below to view its details."
-        )
+        content = f"**All {len(self.matches)} {self.list_title}** · Page {self.index + 1}/{page_count}\n{names}"
+        if self.select is not None:
+            content += f"\n\n{self.select.placeholder} below to view its details."
+        return content
 
     def options(self):
+        if self.select is None:
+            return
         self.select.options = [
             discord.SelectOption(
                 label=m.label[:100],

@@ -24,7 +24,7 @@ A Discord bot for FLASK cards, infusers, monster fights, special encounters and 
 | `!flask artificer damage` / `!flask artificer armor` / `!flask artificer shield` | Filter a class by !flask effects. `artifacter` and `strike` also work as aliases. |
 | `!flask info infuser Shielding` | Show an infuser and its effect. |
 | `!flask info infuser` | List all infusers. |
-| `!flask organs` | List organs and select one to view it. |
+| `!flask organs` | List organ effects and team HP bonuses. |
 | `!flask organ Sentinel` | Show its image, effect, team health bonus and class restriction. |
 | `!flask monster Burning Witch` | Show each monster's mutation, base HP and !flask effects, including changing forms and random !flask pools. |
 | `!flask monsters` | List every monster fight. |
@@ -36,7 +36,7 @@ A Discord bot for FLASK cards, infusers, monster fights, special encounters and 
 | `!flask combo Wildfire` | Find supporting flasks and explain the interactions. Add `level 4` to choose a level. |
 | `!flask explain FB1.…` | Explain a party's flasks, organs, infusers, recognized interactions and cautions. JSON attachments also work. |
 
-`!flask organs` lists organ effects. Use `!flask rogue organs` (or any class) to list every organ that character can receive. Select an organ to see its image and details.
+`!flask organs` lists organ effects. Use `!flask rogue organs` (or any class) to list every organ that character can receive. Use `!flask organ <name>` for its image and details.
 
 Slash commands are also available under `/flask`.
 Flask descriptions show their element icons at the end.
