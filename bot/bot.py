@@ -165,10 +165,9 @@ def result_line(match, emojis=None):
     if match.kind != "organ":
         return match.label
     description = " ".join(match.item["description"].split())
-    icon = (emojis or {}).get("organ:" + str(match.item["id"]), "🫀")
     return (
-        f"{icon} **{discord.utils.escape_markdown(match.label)}** · "
-        f"❤️ +{match.item['health_bonus']} team HP each\n"
+        f"**{discord.utils.escape_markdown(match.label)}** · "
+        f"+{match.item['health_bonus']} ❤️ to each teammate\n"
         f"{discord.utils.escape_markdown(description)}"
     )
 
@@ -182,7 +181,11 @@ async def list_response(catalog, kind, owner, send, emojis=None, character=None)
             and (character is None or character in match.item.get("classes", []))
         ),
         key=lambda match: (
-            match.item.get("biome", 0),
+            (
+                -match.item["health_bonus"]
+                if kind == "organ"
+                else match.item.get("biome", 0)
+            ),
             match.label.casefold(),
             match.item["id"],
         ),
@@ -630,7 +633,9 @@ class ResultsView(OwnedView):
         self.matches = matches
         self.list_title = list_title
         self.level = level
-        self.emojis = emojis if emojis is not None else getattr(catalog, "emoji_values", {})
+        self.emojis = (
+            emojis if emojis is not None else getattr(catalog, "emoji_values", {})
+        )
         self.index = 0
         self.organ_list = bool(list_title) and all(
             match.kind == "organ" for match in matches
@@ -715,7 +720,7 @@ class ResultsView(OwnedView):
             lines.append(result_line(match, self.emojis))
         if self.organ_list:
             title = self.list_title[0].upper() + self.list_title[1:]
-            return f"**{title} · {len(self.matches)} total**\n\n" + "\n\n".join(lines)
+            return f"**{title} · {len(self.matches)} total**\n" + "\n".join(lines)
         names = "\n".join(lines)
         content = f"**All {len(self.matches)} {self.list_title}** · Page {self.index + 1}/{page_count}\n{names}"
         if self.select is not None:
