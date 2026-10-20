@@ -12,7 +12,7 @@ from dataclasses import replace
 from io import BytesIO
 
 import discord
-from advice import combo_lines, message_pages, order_pages
+from advice import combo_lines, message_pages
 from build_protocol import MAX_BUILD_BYTES, decode_build, decode_code
 from builds import BuildCatalog
 from card_emojis import CardEmojis
@@ -26,10 +26,11 @@ from card_filters import (
 )
 from discord import app_commands
 from dotenv import load_dotenv
+from element_icons import with_elements
 from library_client import LibraryError
 from lookup import ROOT, Catalog, Match, parse_message
 from monster_cards import monster_pages
-from party_ideas import THEMES, explain_pages, random_pages
+from party_explanation import explain_pages
 
 LOG = logging.getLogger("flask_bot")
 HELP = (
@@ -42,24 +43,20 @@ HELP = (
     "organs      List organs and their effects.\n"
     "filter      List flasks by class, element or keyword.\n"
     "combo       Find setup partners for a flask.\n"
-    "order       Suggest an order for your exported build.\n"
     "explain     Explain your exported party and its interactions.\n"
-    "random      Generate a themed build challenge.\n"
     "party       Display a party from a FLASK build code.\n"
     "```\n"
-    "**Browse:** `flask info flasks` · `flask info monsters` · `flask info encounters` · `flask info organs`\n\n"
+    "**Browse:** `!flask info flasks` · `!flask info monsters` · `!flask info encounters` · `!flask info organs`\n\n"
     "**Try:**\n"
-    "`flask info Acidburn`\n"
-    "`flask info infuser Shielding`\n"
-    "`flask monster Burning Witch`\n"
-    "`flask Witch Cauldron`\n"
-    "`flask organ Sentinel`\n"
-    "`flask ranger void`\n"
-    "`flask ranger strength`\n\n"
-    "`flask combo Wildfire`\n"
-    "`flask order FB1.…`\n\n"
-    "`flask random rogue`\n\n"
-    "Start commands with `flask`. Slash versions are under `/flask`.\n\n"
+    "`!flask info Acidburn`\n"
+    "`!flask info infuser Shielding`\n"
+    "`!flask monster Burning Witch`\n"
+    "`!flask Witch Cauldron`\n"
+    "`!flask organ Sentinel`\n"
+    "`!flask ranger void`\n"
+    "`!flask ranger strength`\n\n"
+    "`!flask combo Wildfire`\n"
+    "Start commands with `!flask`. Slash versions are under `/flask`.\n\n"
     "**How to export a build:**\n"
     "Open FLASK Share Build, click Copy Build, then paste directly into Discord. That's it."
 )
@@ -70,70 +67,57 @@ def help_text(topic=""):
     details = {
         "explain": (
             "**explain — understand a shared party**\n"
-            "`flask explain FB1.…` or attach an exported JSON with `flask explain`.\n"
-            "You can paste the full copied `flask party FB1.…` command after `flask explain`.\n"
+            "`!flask explain FB1.…` or attach an exported JSON with `!flask explain`.\n"
+            "You can paste the full copied `!flask party FB1.…` command after `!flask explain`.\n"
             "Shows flask roles, recognized interactions, organs, infusers and cautions. Base effects are explained; battle outcomes are not simulated."
-        ),
-        "random": (
-            "**random — try a build challenge**\n"
-            "`flask random` or `flask random rogue`\n"
-            "Themes: Explosion, Poison, Shield, Spikes and Bullets. Any released class also works.\n"
-            "Generates three different classes with four compatible flasks each and optional organs. Press Reroll for another idea. Assemble it in game; it is not an import code or a guaranteed win."
         ),
         "combo": (
             "**combo — find supporting flasks**\n"
-            "`flask combo Wildfire` or `flask combo Explosion! level 4`\n"
+            "`!flask combo Wildfire` or `!flask combo Explosion! level 4`\n"
             "Shows setup partners and explains the interaction. Suggestions use released flasks only."
-        ),
-        "order": (
-            "**order — suggest flask ordering**\n"
-            "`flask order FB1.…` or attach your exported JSON with `flask order`.\n"
-            "You can paste the complete copied command after `flask order`, too.\n"
-            "Suggests buff/debuff setup before payoffs, preserving empty slots and attached infusers. "
-            "Complex timing stays unchanged. This is advice, not a battle simulator or game import."
         ),
         "info": (
             "**info — look up game content**\n"
-            "`flask info flasks` · `flask info monsters` · `flask info encounters`\n"
-            "`flask info Acidburn`\n`flask info Acidburn level 3`\n"
-            "`flask info infuser Shielding`\n"
-            "`flask info infuser` lists every infuser. Card descriptions show base values."
+            "`!flask info flasks` · `!flask info monsters` · `!flask info encounters`\n"
+            "`!flask info Acidburn`\n`!flask info Acidburn level 3`\n"
+            "`!flask info infuser Shielding`\n"
+            "`!flask info infuser` lists every infuser. Card descriptions show base values."
         ),
         "infuser": (
-            "**Infusers**\n`flask info infuser Shielding` shows its icon and effect.\n"
-            "`flask info infuser` lists all infusers. Party results keep each infuser "
+            "**Infusers**\n`!flask info infuser Shielding` shows its icon and effect.\n"
+            "`!flask info infuser` lists all infusers. Party results keep each infuser "
             "attached to its flask; base effects and infuser effects are shown separately."
         ),
         "organ": (
-            "**Organs**\n`flask organs` lists all organs with effects.\n`flask rogue organs` lists every organ Rogue can receive, including unrestricted organs.\n"
-            "`flask organ Sentinel` shows its image, effect, team health bonus and class restriction."
+            "**Organs**\n`!flask organs` lists all organs with effects.\n`!flask rogue organs` lists every organ Rogue can receive, including unrestricted organs.\n"
+            "`!flask organ Sentinel` shows its image, effect, team health bonus and class restriction."
         ),
         "filter": (
-            "**Filter flasks**\n`flask ranger void` lists Ranger's Void flasks with emoji and descriptions.\n"
-            "Use any class and element, a class alone (`flask druid`), or an element alone (`flask life`).\n"
-            "Filter keywords with `flask ranger strength`, `flask poison`, or `flask ranger void luck`.\n"
+            "**Filter flasks**\n`!flask ranger void` lists Ranger's Void flasks with emoji and descriptions.\n"
+            "Use any class and element, a class alone (`!flask druid`), or an element alone (`!flask life`).\n"
+            "Filter keywords with `!flask ranger strength`, `!flask poison`, or `!flask ranger void luck`.\n"
             "Keywords: Strength, Burn, Poison, Control, Spikes/Thorns, Stealth, Chain, Echo, Gamble/Gambling, Luck, Kunai, Totem/Totems, Exhaust, Armor, Lock, Eternal, Flourish, Regrowth, Burst and Bolstering.\n"
             "Stealth also includes Strength-reducing effects. Use `-strength` for those effects alone.\n"
             "Change levels with the dropdown or add `level 3`. Slash command: `/flask filter`."
-            "\n`flask druid starting 4` lists only flasks whose lowest available level is 4. "
+            "\n`!flask druid starting 4` lists only flasks whose lowest available level is 4. "
             "Use the separate **Starts at level…** dropdown to filter; **Display level** changes the stats shown."
         ),
         "party": (
             "**party — show a saved team**\nOpen FLASK Share Build, click Copy Build, "
             "then paste directly into Discord. That's it.\n"
-            "You can also attach an exported JSON file with `flask party`.\n"
+            "You can also attach an exported JSON file with `!flask party`.\n"
             "Party details include flask levels, multiple infusers, mutations, snacks, HP, and element tokens."
         ),
         "monster": (
-            "**Monsters**\n`flask monsters` or `flask info monsters` lists every monster fight.\n"
-            "`flask monster Burning Witch` shows every enemy, its mutation and flask cards, including changing forms where applicable.\n"
+            "**Monsters**\n`!flask monsters` or `!flask info monsters` lists every monster fight.\n"
+            "`!flask monster Burning Witch` shows every enemy, its mutation and flask cards, including changing forms where applicable.\n"
             "Select a name from the list to view it."
         ),
         "event": (
-            "**Special encounters**\n`flask encounters` or `flask info encounters` lists the two encounters in each biome.\n"
-            "`flask Witch Cauldron` or `flask info Witch Cauldron` shows where it appears, its effects and vendor artwork."
+            "**Special encounters**\n`!flask encounters` or `!flask info encounters` lists the two encounters in each biome.\n"
+            "`!flask Witch Cauldron` or `!flask info Witch Cauldron` shows where it appears, its effects and vendor artwork."
         ),
-        "flasks": "**Flasks**\n`flask info flasks` lists every flask. Select a name to see its card and effects.",
+        "flasks": "**Flasks**\n`!flask info flasks` lists every flask. Select a name to see its card and effects.",
         "help": HELP,
     }
     topic = {
@@ -228,7 +212,7 @@ async def info_response(catalog, query, owner, send, level=None, emojis=None):
             for i in sorted(catalog.infusers.values(), key=lambda i: i["name"])
         )
         await send(
-            content=f"**All {len(catalog.infusers)} infusers**\n{names}\n\nExample: `flask info infuser Shielding`"
+            content=f"**All {len(catalog.infusers)} infusers**\n{names}\n\nExample: `!flask info infuser Shielding`"
         )
         return
     if not query:
@@ -297,7 +281,7 @@ class OwnedView(discord.ui.View):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner:
             await interaction.response.send_message(
-                "Run your own `flask show` lookup to use its controls.", ephemeral=True
+                "Run your own `!flask show` lookup to use its controls.", ephemeral=True
             )
             return False
         return True
@@ -370,7 +354,7 @@ async def combo_response(catalog, query, emojis, owner, send, level=None):
     matches = [match for match in matches if match.kind == "card"]
     if not matches:
         await send(
-            content="No matching released flask found. Try `flask combo Wildfire`."
+            content="No matching released flask found. Try `!flask combo Wildfire`."
         )
     elif exact and len(matches) == 1:
         try:
@@ -394,12 +378,12 @@ async def combo_response(catalog, query, emojis, owner, send, level=None):
 
 
 async def build_advice_response(
-    catalog, build_catalog, attachment, code, emojis, owner, send, mode="order"
+    catalog, build_catalog, attachment, code, emojis, owner, send
 ):
     code = (code or "").strip().strip("`").strip()
-    code = re.sub(r"^(?:flask|flash)\s+(?:party|build|deck)\s+", "", code, flags=re.I)
+    code = re.sub(r"^!?flask\s+(?:party|build|deck)\s+", "", code, flags=re.I)
     if not code and attachment is None:
-        await send(content=help_text(mode))
+        await send(content=help_text("explain"))
         return
     if not code and (
         attachment.size > MAX_BUILD_BYTES
@@ -412,7 +396,7 @@ async def build_advice_response(
     try:
         build = decode_code(code) if code else decode_build(await attachment.read())
         pages = await asyncio.to_thread(
-            explain_pages if mode == "explain" else order_pages,
+            explain_pages,
             build,
             catalog,
             build_catalog,
@@ -422,39 +406,6 @@ async def build_advice_response(
         await send(content=str(exc))
         return
     view = AdviceView(pages, owner)
-    await send(content=view.content(), view=view)
-
-
-async def order_response(catalog, build_catalog, attachment, code, emojis, owner, send):
-    await build_advice_response(
-        catalog, build_catalog, attachment, code, emojis, owner, send
-    )
-
-
-class RandomBuildView(AdviceView):
-    def __init__(self, catalog, emojis, owner, theme=""):
-        self.catalog = catalog
-        self.emojis = emojis
-        self.theme = theme
-        super().__init__(random_pages(catalog, emojis, theme), owner)
-        button = discord.ui.Button(label="Reroll", style=discord.ButtonStyle.primary)
-        button.callback = self.reroll
-        self.add_item(button)
-
-    async def reroll(self, interaction):
-        self.pages = random_pages(self.catalog, self.emojis, self.theme)
-        self.index = 0
-        self.previous.disabled = True
-        self.next.disabled = len(self.pages) <= 1
-        await interaction.response.edit_message(content=self.content(), view=self)
-
-
-async def random_response(catalog, emojis, owner, send, theme=""):
-    try:
-        view = RandomBuildView(catalog, emojis, owner, theme)
-    except ValueError as exc:
-        await send(content=str(exc))
-        return
     await send(content=view.content(), view=view)
 
 
@@ -567,6 +518,7 @@ class DetailView(OwnedView):
         self.match = match
         self.page_index = 0
         self.level = level
+        self.full_image = False
         if match.kind == "card":
             current = level if level is not None else match.item["available_level"]
             select = discord.ui.Select(
@@ -587,6 +539,17 @@ class DetailView(OwnedView):
 
             select.callback = change
             self.add_item(select)
+            self.image_button = discord.ui.Button(label="Show full image", row=1)
+
+            async def toggle_image(interaction):
+                self.full_image = not self.full_image
+                self.image_button.label = (
+                    "Hide full image" if self.full_image else "Show full image"
+                )
+                await self.refresh(interaction)
+
+            self.image_button.callback = toggle_image
+            self.add_item(self.image_button)
         elif catalog.pages(match) > 1:
             self.previous = discord.ui.Button(
                 label="Previous", style=discord.ButtonStyle.secondary
@@ -611,8 +574,26 @@ class DetailView(OwnedView):
             for button in (self.previous, self.counter, self.next):
                 self.add_item(button)
 
+    def compact_content(self):
+        card = self.match.item
+        level = self.level if self.level is not None else card["available_level"]
+        description = discord.utils.escape_markdown(
+            " ".join(self.catalog.description(card, level).split())
+        )
+        emojis = getattr(self.catalog, "emoji_values", {})
+        return (
+            f"{emojis.get(card['id'], '🧪')} **{discord.utils.escape_markdown(card['name'])}** "
+            f"(Lv {level}) — {with_elements(description, card, emojis)}\n"
+            f"**Class:** {card.get('character') or 'Neutral / monster'}"
+        )
+
     async def refresh(self, interaction):
         await interaction.response.defer()
+        if self.match.kind == "card" and not self.full_image:
+            await interaction.edit_original_response(
+                content=self.compact_content(), embeds=[], attachments=[], view=self
+            )
+            return
         if hasattr(self, "counter"):
             self.counter.label = (
                 f"{self.page_index+1} / {self.catalog.pages(self.match)}"
@@ -622,7 +603,7 @@ class DetailView(OwnedView):
         )
         try:
             await interaction.edit_original_response(
-                embeds=embeds, attachments=files, view=self
+                content=None, embeds=embeds, attachments=files, view=self
             )
         finally:
             for file in files:
@@ -742,6 +723,13 @@ class ResultsView(OwnedView):
             )
             self.stop()
             return
+        if match.kind == "card":
+            view = DetailView(self.catalog, match, self.owner, self.level)
+            await interaction.edit_original_response(
+                content=view.compact_content(), embeds=[], attachments=[], view=view
+            )
+            self.stop()
+            return
         try:
             embeds, files = await asyncio.to_thread(
                 payload, self.catalog, match, level=self.level
@@ -795,6 +783,10 @@ async def lookup_response(catalog, query, owner, send, level=None, emojis=None):
                 await send(content=str(exc))
                 return
             await send(content=view.content(), view=view)
+            return
+        if matches[0].kind == "card":
+            view = DetailView(catalog, matches[0], owner, level)
+            await send(content=view.compact_content(), view=view)
             return
         try:
             embeds, files = await asyncio.to_thread(
@@ -941,14 +933,16 @@ class BuildView(OwnedView):
         effects = "\n".join(descriptions)
         # Leave room for the rest of the character's Discord embed.
         if len(effects) > 900:
-            return ", ".join(names) + "\nUse flask info infuser <name> for each effect."
+            return (
+                ", ".join(names) + "\nUse !flask info infuser <name> for each effect."
+            )
         return effects
 
 
 async def build_response(catalog, build_catalog, attachment, owner, send, code=None):
     if attachment is None and not code:
         await send(
-            content="Open FLASK Share Build, click Copy Build, then paste the copied command here. Or attach an exported .flaskbuild.json with `flask party`."
+            content="Open FLASK Share Build, click Copy Build, then paste the copied command here. Or attach an exported .flaskbuild.json with `!flask party`."
         )
         return
     if not code and (
@@ -1040,7 +1034,7 @@ class FlaskBot(discord.Client):
                 and starting_level is None
             ):
                 await interaction.followup.send(
-                    "Choose a class, element or keyword. Example: flask ranger strength"
+                    "Choose a class, element or keyword. Example: !flask ranger strength"
                 )
                 return
             await filter_response(
@@ -1377,38 +1371,11 @@ class FlaskBot(discord.Client):
             ]
 
         @group.command(
-            name="order", description="Suggest flask ordering for an exported party."
-        )
-        @app_commands.describe(
-            code="FB1. code or the complete copied flask party command",
-            file="Exported build JSON instead of a code",
-        )
-        @app_commands.checks.cooldown(
-            1, 5.0, key=lambda interaction: interaction.user.id
-        )
-        async def order(
-            interaction: discord.Interaction,
-            code: str | None = None,
-            file: discord.Attachment | None = None,
-        ):
-            await interaction.response.defer(thinking=True)
-            async with self.build_lock:
-                await order_response(
-                    self.catalog,
-                    self.build_catalog,
-                    file,
-                    code,
-                    self.card_emojis.values,
-                    interaction.user.id,
-                    interaction.followup.send,
-                )
-
-        @group.command(
             name="explain",
             description="Explain a shared party's flasks, interactions and cautions.",
         )
         @app_commands.describe(
-            code="FB1. code or the complete copied flask party command",
+            code="FB1. code or the complete copied !flask party command",
             file="Exported build JSON instead of a code",
         )
         @app_commands.checks.cooldown(
@@ -1429,35 +1396,7 @@ class FlaskBot(discord.Client):
                     self.card_emojis.values,
                     interaction.user.id,
                     interaction.followup.send,
-                    "explain",
                 )
-
-        @group.command(
-            name="random",
-            description="Generate a themed three-character build challenge.",
-        )
-        @app_commands.checks.cooldown(
-            1, 3.0, key=lambda interaction: interaction.user.id
-        )
-        async def random_build(interaction: discord.Interaction, theme: str = ""):
-            await interaction.response.defer(thinking=True)
-            await random_response(
-                self.catalog,
-                self.card_emojis.values,
-                interaction.user.id,
-                interaction.followup.send,
-                theme,
-            )
-
-        @random_build.autocomplete("theme")
-        async def random_theme_autocomplete(interaction, current: str):
-            return [
-                app_commands.Choice(
-                    name=f"{theme.name} · {theme.character}", value=theme.name
-                )
-                for theme in THEMES
-                if current.casefold() in f"{theme.name} {theme.character}".casefold()
-            ]
 
         add_commands(group)
         self.tree.add_command(group)
@@ -1544,13 +1483,13 @@ class FlaskBot(discord.Client):
         if not self.text_commands or message.author.bot:
             return
         help_request = re.fullmatch(
-            r"\s*(?:flask|flash)\s+help(?:\s+(.*))?\s*", message.content, re.I
+            r"\s*!flask\s+help(?:\s+(.*))?\s*", message.content, re.I
         )
         if help_request:
             await message.channel.send(help_text(help_request[1] or ""))
             return
         advice_request = re.fullmatch(
-            r"\s*(?:flask|flash)\s+(combo|order|explain|random)(?:\s+([\s\S]*?))?\s*",
+            r"\s*!flask\s+(combo|explain)(?:\s+([\s\S]*?))?\s*",
             message.content,
             re.I,
         )
@@ -1562,7 +1501,7 @@ class FlaskBot(discord.Client):
             try:
                 if advice_request[1].lower() == "combo":
                     query, level = parse_message(
-                        "flask show " + (advice_request[2] or "")
+                        "!flask show " + (advice_request[2] or "")
                     )
                     await combo_response(
                         self.catalog,
@@ -1571,14 +1510,6 @@ class FlaskBot(discord.Client):
                         message.author.id,
                         message.channel.send,
                         level,
-                    )
-                elif advice_request[1].lower() == "random":
-                    await random_response(
-                        self.catalog,
-                        self.card_emojis.values,
-                        message.author.id,
-                        message.channel.send,
-                        advice_request[2] or "",
                     )
                 else:
                     async with self.build_lock:
@@ -1590,13 +1521,12 @@ class FlaskBot(discord.Client):
                             self.card_emojis.values,
                             message.author.id,
                             message.channel.send,
-                            advice_request[1].lower(),
                         )
             except discord.Forbidden:
                 LOG.warning("Cannot send advice: check channel permissions.")
             return
         short_request = re.fullmatch(
-            r"\s*(?:flask|flash)\s+(info|monster)(?:\s+(.*))?\s*", message.content, re.I
+            r"\s*!flask\s+(info|monster)(?:\s+(.*))?\s*", message.content, re.I
         )
         if short_request and (
             not short_request[2]
@@ -1620,7 +1550,7 @@ class FlaskBot(discord.Client):
                 )
             return
         build_request = re.fullmatch(
-            r"\s*(?:flask|flash)\s+(?:party|build|deck)(?:\s+(\S+))?\s*",
+            r"\s*!flask\s+(?:party|build|deck)(?:\s+(\S+))?\s*",
             message.content,
             re.I,
         )

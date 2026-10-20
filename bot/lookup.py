@@ -459,12 +459,12 @@ class Catalog:
 
 def parse_message(content: str) -> tuple[str, int | None] | None:
     match = re.match(
-        r"^\s*(?:flask|flash)\s+(show|info|monster|event|encounter|organ|mutation)(?:\s+(.*))?\s*$",
+        r"^\s*!flask\s+(show|info|monster|event|encounter|organ|mutation)(?:\s+(.*))?\s*$",
         content,
         re.I,
     )
     if not match:
-        direct = re.fullmatch(r"\s*(?:flask|flash)\s+(.+?)\s*", content, re.I)
+        direct = re.fullmatch(r"\s*!flask\s+(.+?)\s*", content, re.I)
         return (direct[1], None) if direct else None
     query = (match[2] or "").strip()
     level = None

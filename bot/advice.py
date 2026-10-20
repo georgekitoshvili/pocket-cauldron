@@ -4,7 +4,6 @@ import re
 from dataclasses import dataclass
 from functools import lru_cache
 
-from build_protocol import validate_build
 from discord.utils import escape_markdown
 from element_icons import with_elements
 
@@ -86,24 +85,6 @@ STATUSES = (
     "S-Drone",
     "H-Drone",
 )
-POSITIONAL = re.compile(
-    r"\b(?:left|right|first slot|last slot|slot [1-9]|slots [1-9]|next turn|next [1-9] turns?)\b",
-    re.I,
-)
-TIMING = re.compile(r"\b(?:chain|echo|combo|follow-up|opener|execute)\b", re.I)
-TIMING_INFUSERS = frozenset(
-    {
-        "Opening",
-        "Augmented",
-        "Mimicking",
-        "Refined",
-        "Reckless",
-        "Swift",
-        "Vigilant",
-        "Renewed",
-        "Graceful",
-    }
-)
 MONSTER_SHOP_FLASKS = frozenset(
     {
         "Double Slash",
@@ -126,14 +107,6 @@ MONSTER_SHOP_FLASKS = frozenset(
         "Sharp Blade",
     }
 )
-
-
-def has_timing_infuser(flask, build_catalog):
-    return any(
-        build_catalog.name(ident) in TIMING_INFUSERS
-        or build_catalog.name(ident).startswith("Unknown #")
-        for ident in flask["infusers"]
-    )
 
 
 def text_at(card, level=None):
@@ -234,7 +207,7 @@ def combo_lines(catalog, card, emojis, level=None):
         raise ValueError(f"{card['name']} starts at level {card['available_level']}.")
     shown_level = card["available_level"] if level is None else level
     lines = [
-        f"**Combos for {escape_markdown(card['name'])} · Lv {shown_level}**",
+        f"**Combos for {escape_markdown(card['name'])} Â· Lv {shown_level}**",
         with_elements(escape_markdown(text), card, emojis),
         "",
     ]
@@ -278,12 +251,12 @@ def combo_lines(catalog, card, emojis, level=None):
         seen.add(support["id"])
         character = support.get("character") or "Neutral / monster"
         teammate = (
-            " · teammate"
+            " Â· teammate"
             if support.get("character") not in (None, card.get("character"))
             else ""
         )
         lines.append(
-            f"{emojis.get(support['id'], '🧪')} **{escape_markdown(support['name'])}** ({character}{teammate}) — {reason}.\n{with_elements(escape_markdown(' '.join(text_at(support).split())), support, emojis)}"
+            f"{emojis.get(support['id'], 'ðŸ§ª')} **{escape_markdown(support['name'])}** ({character}{teammate}) â€” {reason}.\n{with_elements(escape_markdown(' '.join(text_at(support).split())), support, emojis)}"
         )
         if len(seen) == 6:
             break
@@ -348,165 +321,3 @@ def pair_reasons(before, after, catalog):
             if rule.status in ("enemy_vulnerable", "enemy_armor_loss")
         ]
     return rules
-
-
-def order_character(character, catalog, build_catalog):
-    slots = character["flasks"]
-    cards = [catalog.cards.get(flask["id"]) if flask else None for flask in slots]
-    if any(
-        flask and (card is None or text_at(card, flask["level"]) is None)
-        for flask, card in zip(slots, cards)
-    ):
-        return (
-            list(range(len(slots))),
-            [],
-            [
-                "An unknown or unavailable flask prevents a reliable ordering suggestion. Kept this character's order."
-            ],
-        )
-    pinned, warnings = set(), []
-    for index, (flask, card) in enumerate(zip(slots, cards)):
-        if flask is None:
-            pinned.add(index)
-            continue
-        text = text_at(card, flask["level"])
-        if (
-            POSITIONAL.search(text)
-            or TIMING.search(text)
-            or has_timing_infuser(flask, build_catalog)
-        ):
-            pinned.update(range(max(0, index - 1), min(len(slots), index + 2)))
-    if any(flask and has_timing_infuser(flask, build_catalog) for flask in slots):
-        warnings.append(
-            "Flasks with timing-changing or unknown infusers keep their slots and neighbors. Other infusers move with their flask."
-        )
-    if any(
-        card
-        and (
-            POSITIONAL.search(text_at(card, flask["level"]))
-            or TIMING.search(text_at(card, flask["level"]))
-        )
-        for flask, card in zip(slots, cards)
-    ):
-        warnings.append(
-            "Positional and timing effects (including Chain, Echo, Combo and Openers) keep their slots and neighbors."
-        )
-    if any(
-        card
-        and re.search(
-            r"\b(?:heat|frost|lock|spirit|bullet)\b",
-            text_at(card, flask["level"]),
-            re.I,
-        )
-        for flask, card in zip(slots, cards)
-    ):
-        # These are stateful systems, so do not disturb their existing schedule.
-        return (
-            list(range(len(slots))),
-            [],
-            warnings
-            + [
-                "Heat/Frost, locks, spirits or bullet sequencing need combat modeling. Kept this character's order."
-            ],
-        )
-    free = [i for i in range(len(slots)) if i not in pinned]
-    edges = {}
-    for i, first in enumerate(slots):
-        for j, second in enumerate(slots):
-            if i != j and first and second:
-                rules = pair_reasons(first, second, catalog)
-                if rules:
-                    edges[i, j] = rules
-
-    def weight(i, j):
-        return sum(rule.weight for rule in edges.get((i, j), ()))
-
-    @lru_cache(maxsize=None)
-    def best(position, mask):
-        if position == len(slots):
-            return 0, ()
-        used = {free[n] for n in range(len(free)) if mask & (1 << n)}
-        used.update(i for i in pinned if i < position)
-        choices = (
-            [(position, mask)]
-            if position in pinned
-            else [
-                (i, mask | (1 << n)) for n, i in enumerate(free) if not mask & (1 << n)
-            ]
-        )
-        winner = None
-        for original, new_mask in choices:
-            following_score, following = best(position + 1, new_mask)
-            score = following_score + sum(weight(earlier, original) for earlier in used)
-            result = (original,) + following
-            # Break ties by moving fewer cards, then by original slot order.
-            moved = sum(old != new for new, old in enumerate(result, position))
-            candidate = (score, -moved, tuple(-i for i in result), result)
-            if winner is None or candidate[:3] > winner[:3]:
-                winner = candidate
-        return winner[0], winner[3]
-
-    _, suggested = best(0, 0)
-    original = tuple(range(len(slots)))
-
-    def score(order):
-        return sum(
-            weight(first, second)
-            for n, first in enumerate(order)
-            for second in order[n + 1 :]
-        )
-
-    if score(suggested) <= score(original):
-        return list(original), [], warnings
-    reasons = []
-    positions = {old: new for new, old in enumerate(suggested)}
-    for (i, j), rules in edges.items():
-        if i > j and positions[i] < positions[j]:
-            reason = max(rules, key=lambda rule: rule.weight).reason
-            reasons.append(f"{cards[i]['name']} before {cards[j]['name']}: {reason}.")
-    return list(suggested), reasons[:6], warnings
-
-
-def order_pages(build, catalog, build_catalog, emojis):
-    build = validate_build(build)
-    lines = [
-        "**Suggested flask order**",
-        "Uses the flasks you already own. Empty slots stay fixed; levels and infusers stay attached. Advice only: this does not change your game or simulate a battle.",
-        "",
-    ]
-    for number, character in enumerate(build["build"]["characters"], 1):
-        order, reasons, warnings = order_character(character, catalog, build_catalog)
-        lines.append(
-            f"**{number}. {escape_markdown(build_catalog.name(character['id']))}**"
-        )
-        changed = order != list(range(len(order)))
-        lines.append(
-            "Suggested slots, left to right:"
-            if changed
-            else "Keep the current order under the supported rules:"
-        )
-        for position, old in enumerate(order, 1):
-            flask = character["flasks"][old]
-            if flask is None:
-                lines.append(f"{position}. Empty")
-                continue
-            card = catalog.cards.get(flask["id"])
-            name = card["name"] if card else "Unavailable flask"
-            suffix = (
-                f" · from slot {old + 1}" if changed and position != old + 1 else ""
-            )
-            infusers = ", ".join(
-                build_catalog.name(ident) for ident in flask["infusers"]
-            )
-            if infusers:
-                suffix += " · " + escape_markdown(infusers)
-            lines.append(
-                f"{position}. {emojis.get(flask['id'], '🧪')} **{escape_markdown(name)}** · Lv {flask['level']}{suffix}"
-            )
-        lines.extend("• " + escape_markdown(reason) for reason in reasons)
-        lines.extend("• " + warning for warning in warnings)
-        lines.append("")
-    lines.append(
-        "Checks explicit buff/debuff setup before payoffs. Enemy timing, target rolls, organs, snacks, elements and later rounds are not scored. Keeping an order does not mean it is optimal."
-    )
-    return message_pages(lines)

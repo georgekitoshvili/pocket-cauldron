@@ -275,7 +275,7 @@ class ShareApp:
         try:
             # Re-read on each click so an open helper does not keep sharing stale data.
             build = self.selected_build(reread=True)
-            command = "flask party " + encode_code(build)
+            command = "!flask party " + encode_code(build)
             self.root.clipboard_clear()
             self.root.clipboard_append(command)
             self.root.update()
@@ -324,14 +324,14 @@ def self_test(output):
             equipped_flasks=sum(
                 f is not None for c in b["build"]["characters"] for f in c["flasks"]
             ),
-            command_length=len("flask party " + code),
+            command_length=len("!flask party " + code),
             save_unchanged=True,
         )
         copied = []
         window.clipboard_clear = lambda: None
         window.clipboard_append = lambda text: copied.append(text)
         app.copy_build()
-        assert copied and copied[0].startswith("flask party FB1.")
+        assert copied and copied[0].startswith("!flask party FB1.")
         assert decode_code(copied[0].split(" ", 2)[2]) == b
         assert app.status.get().startswith("Copied!")
         result["copy_button_verified"] = True

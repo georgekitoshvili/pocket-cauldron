@@ -281,7 +281,7 @@ def main():
     if args.command_file:
         from build_protocol import encode_code
 
-        command = "flask party " + encode_code(result)
+        command = "!flask party " + encode_code(result)
         args.command_file.parent.mkdir(parents=True, exist_ok=True)
         args.command_file.write_text(command, encoding="utf8")
     else:
