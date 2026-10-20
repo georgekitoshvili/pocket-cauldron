@@ -30,6 +30,7 @@ KEYWORD_ALIASES = {
     "Armor": ("armor", "armour"),
     "Damage": ("damage", "strike", "strikes"),
     "Shield": ("shield", "shields"),
+    "Health": ("health", "healing", "heal"),
     "Lock": ("lock", "locked"),
     "Eternal": ("eternal", "ethernal"),
     "Flourish": ("flourish", "regen", "regenerate", "regeneration"),
@@ -39,6 +40,8 @@ KEYWORD_ALIASES = {
 }
 
 KEYWORD_PATTERNS = {
+    "Health": r"\b(?:health|heal(?:s|ed|ing)?)\b",
+
     "Totem": r"\btotems?\b",
     "Burn": r"\bburn(?:ed|s|ing)?\b",
     "Poison": r"\bpoison(?:ed|s|ing)?\b",
