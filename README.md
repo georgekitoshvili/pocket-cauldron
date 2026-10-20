@@ -21,6 +21,7 @@ A Discord bot for FLASK cards, infusers, monster fights, special encounters and 
 | `flask druid starting 4` | Only Druid flasks that start at level 4. Also available in the separate “Starts at level…” dropdown. |
 | `flask ranger strength` | Filter by class and keyword. Also works with `flask poison` or `flask ranger void luck`. |
 | `flask druid` / `flask life` | Filter by any class or element. Use the controls for pages and levels. |
+| `flask artificer strike` / `flask artificer armor` / `flask artificer shield` | Filter a class by flask effects. `artifacter` also works. |
 | `flask info infuser Shielding` | Show an infuser and its effect. |
 | `flask info infuser` | List all infusers. |
 | `flask organs` | List organs and select one to view it. |
