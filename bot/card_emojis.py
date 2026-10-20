@@ -7,6 +7,7 @@ import re
 from io import BytesIO
 
 import discord
+from element_icons import element_entries
 from PIL import Image
 
 LOG = logging.getLogger("flask_emojis")
@@ -44,6 +45,7 @@ class CardEmojis:
 
     async def sync(self, catalog):
         async with self.lock:
+            catalog.emoji_values = self.values
             try:
                 existing = await self.client.fetch_application_emojis()
                 names = {emoji.name: emoji for emoji in existing}
@@ -87,6 +89,7 @@ class CardEmojis:
                         name=name, image=image
                     )
                     self.values[card["id"]] = str(emoji)
+                    names[name] = emoji
                     count += 1
                     if len(self.values) % 50 == 0:
                         LOG.info(
@@ -95,7 +98,34 @@ class CardEmojis:
                             len(desired),
                         )
                 LOG.info(
-                    "Flask emoji sync complete: %d/%d.", len(self.values), len(desired)
+                    "Flask emoji sync complete: %d/%d.",
+                    sum(card["id"] in self.values for card, _ in desired),
+                    len(desired),
+                )
+                for element in element_entries(catalog):
+                    name = (
+                        await asyncio.to_thread(emoji_name, catalog, element)
+                    ).replace("flask_", "element_", 1)
+                    emoji = names.get(name)
+                    if emoji is None:
+                        if count >= 2000:
+                            LOG.warning(
+                                "Application emoji capacity reached; elements use text labels."
+                            )
+                            break
+                        raw = await asyncio.to_thread(emoji_image, catalog, element)
+                        emoji = await self.client.create_application_emoji(
+                            name=name, image=raw
+                        )
+                        names[name] = emoji
+                        count += 1
+                    self.values["element:" + element["name"]] = str(emoji)
+                LOG.info(
+                    "Element emoji sync complete: %d.",
+                    sum(
+                        isinstance(key, str) and key.startswith("element:")
+                        for key in self.values
+                    ),
                 )
             except (discord.HTTPException, OSError, ValueError):
                 LOG.exception(

@@ -1,6 +1,7 @@
 """Compact fight pages, including monster mutations and changing loadouts."""
 
 from discord.utils import escape_markdown
+from element_icons import with_elements
 
 
 def flask_row(catalog, group, emojis, location):
@@ -10,6 +11,7 @@ def flask_row(catalog, group, emojis, location):
     description = escape_markdown(
         " ".join(catalog.description(card, group["level"]).split())
     )
+    description = with_elements(description, card, emojis)
     row = f"{emojis.get(card['id'], '🧪')} **{escape_markdown(card['name'])}** · Lv {group['level']}{location} — {description}"
     if group.get("infusers"):
         row += (

@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass, replace
 
 from discord.utils import escape_markdown
+from element_icons import with_elements
 from lookup import normalize
 
 KEYWORD_ALIASES = {
@@ -211,6 +212,7 @@ def card_pages(catalog, selection, emojis, level=None):
         description = escape_markdown(
             " ".join(catalog.description(card, shown_level).split())
         )
+        description = with_elements(description, card, emojis)
         character = (
             f" · {card.get('character') or 'Neutral / monster'}"
             if selection.character is None

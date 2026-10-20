@@ -935,6 +935,7 @@ class FlaskBot(discord.Client):
         self.library_task = None
         self.emoji_task = None
         self.card_emojis = CardEmojis(self)
+        self.catalog.emoji_values = self.card_emojis.values
         self.tree = app_commands.CommandTree(self)
         self.last_lookup = {}
         group = app_commands.Group(
@@ -1411,6 +1412,7 @@ class FlaskBot(discord.Client):
                 if snapshot.revision == old.library.revision:
                     continue
                 catalog = await asyncio.to_thread(Catalog, snapshot=snapshot)
+                catalog.emoji_values = self.card_emojis.values
                 builds = BuildCatalog(root=catalog.root, snapshot=snapshot)
                 async with self.build_lock:
                     self.catalog, self.build_catalog = catalog, builds

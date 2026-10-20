@@ -6,6 +6,7 @@ from functools import lru_cache
 
 from build_protocol import validate_build
 from discord.utils import escape_markdown
+from element_icons import with_elements
 
 
 @dataclass(frozen=True)
@@ -234,7 +235,7 @@ def combo_lines(catalog, card, emojis, level=None):
     shown_level = card["available_level"] if level is None else level
     lines = [
         f"**Combos for {escape_markdown(card['name'])} · Lv {shown_level}**",
-        escape_markdown(text),
+        with_elements(escape_markdown(text), card, emojis),
         "",
     ]
     candidates = []
@@ -282,7 +283,7 @@ def combo_lines(catalog, card, emojis, level=None):
             else ""
         )
         lines.append(
-            f"{emojis.get(support['id'], '🧪')} **{escape_markdown(support['name'])}** ({character}{teammate}) — {reason}.\n{escape_markdown(' '.join(text_at(support).split()))}"
+            f"{emojis.get(support['id'], '🧪')} **{escape_markdown(support['name'])}** ({character}{teammate}) — {reason}.\n{with_elements(escape_markdown(' '.join(text_at(support).split())), support, emojis)}"
         )
         if len(seen) == 6:
             break

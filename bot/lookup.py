@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
 
+from element_icons import with_elements
 from library_client import LibraryClient
 
 ROOT = Path(__file__).resolve().parent
@@ -259,7 +260,9 @@ class Catalog:
         if match.kind == "card":
             c = match.item
             level = c["available_level"] if level is None else level
-            desc = self.description(c, level)
+            desc = with_elements(
+                self.description(c, level), c, getattr(self, "emoji_values", {})
+            )
             details = [
                 ("Class", c.get("character") or "Neutral / monster"),
                 ("Elements", ", ".join(c["elements"]) or "None"),
@@ -314,7 +317,11 @@ class Catalog:
         ]
         for group in groups[index * 3 : index * 3 + 3]:
             c = self.cards[group["id"]]
-            desc = self.description(c, group["level"])
+            desc = with_elements(
+                self.description(c, group["level"]),
+                c,
+                getattr(self, "emoji_values", {}),
+            )
             slots = ", ".join(str(s) for s in group["slots"])
             details = f"{'Slots' if len(group['slots'])>1 else 'Slot'} {slots}"
             if group["infusers"]:
@@ -400,7 +407,11 @@ class Catalog:
                                     if len(group["slots"]) > 1
                                     else ""
                                 ),
-                                description=self.description(card, group["level"]),
+                                description=with_elements(
+                                    self.description(card, group["level"]),
+                                    card,
+                                    getattr(self, "emoji_values", {}),
+                                ),
                                 image=card["thumbnail"],
                                 small=True,
                                 fields=[],

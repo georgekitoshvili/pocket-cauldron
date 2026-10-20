@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from advice import attacks, message_pages, pair_reasons, produces, text_at
 from build_protocol import validate_build
 from discord.utils import escape_markdown
+from element_icons import with_elements
 
 
 @dataclass(frozen=True)
@@ -158,7 +159,7 @@ def random_pages(catalog, emojis, query="", rng=None):
         lines.extend((f"**{number}. {theme.character} · {theme.name}**", theme.plan))
         for slot, card in enumerate(cards, 1):
             lines.append(
-                f"{slot}. {emojis.get(card['id'], '🧪')} **{escape_markdown(card['name'])}** · Lv {card['available_level']} — {escape_markdown(' '.join(text_at(card).split()))}"
+                f"{slot}. {emojis.get(card['id'], '🧪')} **{escape_markdown(card['name'])}** · Lv {card['available_level']} — {with_elements(escape_markdown(' '.join(text_at(card).split())), card, emojis)}"
             )
         if organ:
             lines.append(
@@ -242,7 +243,7 @@ def explain_pages(build, catalog, build_catalog, emojis):
                 continue
             known.append((slot, flask, card))
             lines.append(
-                f"{slot}. {emojis.get(card['id'], '🧪')} **{escape_markdown(card['name'])}** · Lv {flask['level']} — {escape_markdown(' '.join(text_at(card, flask['level']).split()))}"
+                f"{slot}. {emojis.get(card['id'], '🧪')} **{escape_markdown(card['name'])}** · Lv {flask['level']} — {with_elements(escape_markdown(' '.join(text_at(card, flask['level']).split())), card, emojis)}"
             )
             neutralized = any(
                 catalog.infusers.get(ident, {}).get("name") == "Neutralized"
