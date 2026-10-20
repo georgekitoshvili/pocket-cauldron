@@ -39,6 +39,7 @@ A Discord bot for FLASK cards, infusers, monster fights, special encounters and 
 | `flask random` / `flask random rogue` | Generate a themed three-character build challenge. Use Reroll for another idea. |
 
 Slash commands are also available under `/flask`.
+Flask descriptions show their element icons at the end.
 
 For ordering, paste your build code after `flask order`; pasting the full copied `flask party FB1.…` command after it also works. Ordering checks setup effects before payoffs. It preserves empty slots and protects complex timing; it does not simulate battles or change your game.
 
