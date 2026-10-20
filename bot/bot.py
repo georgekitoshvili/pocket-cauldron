@@ -105,7 +105,7 @@ def help_text(topic=""):
             "attached to its flask; base effects and infuser effects are shown separately."
         ),
         "organ": (
-            "**Organs**\n`flask organs` or `flask info organs` lists all player organs.\n"
+            "**Organs**\n`flask organs` lists all organs with effects.\n`flask rogue organs` lists every organ Rogue can receive, including unrestricted organs.\n"
             "`flask organ Sentinel` shows its image, effect, team health bonus and class restriction."
         ),
         "filter": (
@@ -158,9 +158,40 @@ LIST_KINDS = {
 }
 
 
-async def list_response(catalog, kind, owner, send, emojis=None):
+def organ_classes(catalog):
+    return sorted(
+        {name for organ in catalog.organs.values() for name in organ["classes"]}
+    )
+
+
+def organ_character(catalog, query):
+    query = re.sub(r"^info\s+", "", query.strip(), flags=re.I)
+    query = re.sub(r"\bartifacter\b", "Artificer", query, flags=re.I)
+    for character in organ_classes(catalog):
+        for noun in ("organs", "mutations"):
+            if query.casefold() in (
+                f"{character} {noun}".casefold(),
+                f"{noun} {character}".casefold(),
+            ):
+                return character
+    return None
+
+
+def result_line(match):
+    if match.kind != "organ":
+        return match.label
+    description = " ".join(match.item["description"].split())
+    return f"**{discord.utils.escape_markdown(match.label)}** — {discord.utils.escape_markdown(description)}"
+
+
+async def list_response(catalog, kind, owner, send, emojis=None, character=None):
     matches = sorted(
-        (match for match in catalog.matches if match.kind == kind),
+        (
+            match
+            for match in catalog.matches
+            if match.kind == kind
+            and (character is None or character in match.item.get("classes", []))
+        ),
         key=lambda match: (
             match.item.get("biome", 0),
             match.label.casefold(),
@@ -173,6 +204,8 @@ async def list_response(catalog, kind, owner, send, emojis=None):
         "event": "special encounters",
         "organ": "organs",
     }[kind]
+    if character:
+        title = f"{character} {title}"
     if not matches:
         await send(content=f"No {title} are available in the current library.")
         return
@@ -182,6 +215,10 @@ async def list_response(catalog, kind, owner, send, emojis=None):
 
 async def info_response(catalog, query, owner, send, level=None, emojis=None):
     query = query.strip()
+    character = organ_character(catalog, query)
+    if character:
+        await list_response(catalog, "organ", owner, send, emojis, character)
+        return
     if query.lower() in LIST_KINDS:
         await list_response(catalog, LIST_KINDS[query.lower()], owner, send, emojis)
         return
@@ -609,6 +646,19 @@ class ResultsView(OwnedView):
         self.level = level
         self.emojis = emojis if emojis is not None else {}
         self.index = 0
+        self.result_pages = []
+        page = []
+        size = 0
+        for match in matches:
+            line_size = len(result_line(match)) + 1
+            if page and (len(page) == 25 or size + line_size > 1700):
+                self.result_pages.append(page)
+                page = []
+                size = 0
+            page.append(match)
+            size += line_size
+        if page:
+            self.result_pages.append(page)
         kinds = {match.kind for match in matches}
         placeholder = (
             {
@@ -624,12 +674,12 @@ class ResultsView(OwnedView):
         self.select = discord.ui.Select(placeholder=placeholder)
         self.select.callback = self.pick
         self.add_item(self.select)
-        if len(matches) > 25:
+        if len(self.result_pages) > 1:
             prev = discord.ui.Button(label="Previous results", row=1)
             nxt = discord.ui.Button(label="More results", row=1)
 
             async def backwards(interaction):
-                self.index = (self.index - 1) % ((len(matches) + 24) // 25)
+                self.index = (self.index - 1) % len(self.result_pages)
                 self.options()
                 await interaction.response.edit_message(
                     **({"content": self.list_content()} if self.list_title else {}),
@@ -637,7 +687,7 @@ class ResultsView(OwnedView):
                 )
 
             async def forwards(interaction):
-                self.index = (self.index + 1) % ((len(matches) + 24) // 25)
+                self.index = (self.index + 1) % len(self.result_pages)
                 self.options()
                 await interaction.response.edit_message(
                     **({"content": self.list_content()} if self.list_title else {}),
@@ -651,15 +701,15 @@ class ResultsView(OwnedView):
         self.options()
 
     def list_content(self):
-        page_count = (len(self.matches) + 24) // 25
+        page_count = len(self.result_pages)
         lines = []
         previous_biome = None
-        for match in self.matches[self.index * 25 : self.index * 25 + 25]:
+        for match in self.result_pages[self.index]:
             biome = match.item.get("biome")
             if biome is not None and biome != previous_biome:
                 lines.append(f"\n**Biome {biome}**")
                 previous_biome = biome
-            lines.append(match.label)
+            lines.append(result_line(match))
         names = "\n".join(lines)
         return (
             f"**All {len(self.matches)} {self.list_title}** · Page {self.index + 1}/{page_count}\n"
@@ -672,7 +722,7 @@ class ResultsView(OwnedView):
                 label=m.label[:100],
                 value=m.key,
             )
-            for m in self.matches[self.index * 25 : self.index * 25 + 25]
+            for m in self.result_pages[self.index]
         ]
 
     async def pick(self, interaction):
@@ -712,6 +762,10 @@ class ResultsView(OwnedView):
 
 async def lookup_response(catalog, query, owner, send, level=None, emojis=None):
     query = query.strip()
+    character = organ_character(catalog, query)
+    if character:
+        await list_response(catalog, "organ", owner, send, emojis, character)
+        return
     list_query = re.sub(r"^info\s+", "", query, flags=re.I).lower()
     if list_query in LIST_KINDS:
         await list_response(catalog, LIST_KINDS[list_query], owner, send, emojis)
@@ -1190,13 +1244,32 @@ class FlaskBot(discord.Client):
                 )
 
             @parent.command(name="organs", description="List organs and their effects.")
-            async def organs(interaction: discord.Interaction):
+            async def organs(
+                interaction: discord.Interaction, character: str | None = None
+            ):
+                if character is not None and character not in organ_classes(
+                    self.catalog
+                ):
+                    await interaction.response.send_message(
+                        "Choose a class from the suggestions."
+                    )
+                    return
                 await list_response(
                     self.catalog,
                     "organ",
                     interaction.user.id,
                     interaction.response.send_message,
+                    character=character,
                 )
+
+            @organs.autocomplete("character")
+            async def organ_character_autocomplete(interaction, current: str):
+                classes = organ_classes(self.catalog)
+                return [
+                    app_commands.Choice(name=name, value=name)
+                    for name in classes
+                    if current.casefold() in name.casefold()
+                ][:25]
 
             @parent.command(
                 name="organ",

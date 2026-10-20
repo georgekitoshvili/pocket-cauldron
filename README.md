@@ -38,6 +38,8 @@ A Discord bot for FLASK cards, infusers, monster fights, special encounters and 
 | `flask explain FB1.…` | Explain a party's flasks, organs, infusers, recognized interactions and cautions. JSON attachments also work. |
 | `flask random` / `flask random rogue` | Generate a themed three-character build challenge. Use Reroll for another idea. |
 
+`flask organs` lists organ effects. Use `flask rogue organs` (or any class) to list every organ that character can receive. Select an organ to see its image and details.
+
 Slash commands are also available under `/flask`.
 Flask descriptions show their element icons at the end.
 
