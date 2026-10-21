@@ -197,5 +197,4 @@ def explain_pages(build, catalog, build_catalog, emojis):
                 "",
             )
         )
-    lines.append("Use `!flask combo <flask name>` for supporting flasks.")
     return message_pages(lines)

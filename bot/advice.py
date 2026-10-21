@@ -4,9 +4,6 @@ import re
 from dataclasses import dataclass
 from functools import lru_cache
 
-from discord.utils import escape_markdown
-from element_icons import with_elements
-
 
 @dataclass(frozen=True)
 class Setup:
@@ -84,28 +81,6 @@ STATUSES = (
     "D-Drone",
     "S-Drone",
     "H-Drone",
-)
-MONSTER_SHOP_FLASKS = frozenset(
-    {
-        "Double Slash",
-        "Furry Sap",
-        "Safety",
-        "Bark Slam",
-        "Broom Bash",
-        "Poison Sting",
-        "Mad Cauldron",
-        "Blood Chomp",
-        "Inflate",
-        "Munch",
-        "Armor Cleave",
-        "Cleanup",
-        "Spiky Body",
-        "Burning Slash",
-        "Impenetrable",
-        "Dragon Jaws",
-        "Metabolise",
-        "Sharp Blade",
-    }
 )
 
 
@@ -193,105 +168,6 @@ def setups(card, level=None):
         requirements.append(Setup("self_luck", "Luck improves Gamble odds", 5))
     # One reason per resource, preferring the specific interaction.
     return tuple({rule.status: rule for rule in reversed(requirements)}.values())
-
-
-def compatible(source, support, text):
-    if support.get("character") in (None, source.get("character")):
-        return True
-    return bool(re.search(r"\b(?:your team|all allies|all enemies)\b", text, re.I))
-
-
-def combo_lines(catalog, card, emojis, level=None):
-    text = text_at(card, level)
-    if text is None:
-        raise ValueError(f"{card['name']} starts at level {card['available_level']}.")
-    shown_level = card["available_level"] if level is None else level
-    lines = [
-        f"**Combos for {escape_markdown(card['name'])} Â· Lv {shown_level}**",
-        with_elements(escape_markdown(text), card, emojis),
-        "",
-    ]
-    candidates = []
-    requirements = setups(card, level)
-    own_effects = produces(text)
-    for support in catalog.cards.values():
-        if support["id"] == card["id"]:
-            continue
-        if (
-            support.get("character") is None
-            and support["name"] not in MONSTER_SHOP_FLASKS
-        ):
-            continue
-        support_text = text_at(support)
-        if compatible(card, support, support_text):
-            effects = produces(support_text)
-            for rule in requirements:
-                if rule.status in effects:
-                    candidates.append(
-                        (rule.weight, support, "Use as setup: " + rule.reason)
-                    )
-        if support.get("character") in (None, card.get("character")):
-            for rule in setups(support):
-                if rule.status in own_effects:
-                    candidates.append(
-                        (rule.weight, support, "Follow with this flask: " + rule.reason)
-                    )
-    candidates.sort(
-        key=lambda row: (
-            -row[0],
-            row[1].get("character") != card.get("character"),
-            row[1].get("character") is None,
-            row[1]["name"],
-        )
-    )
-    seen = set()
-    for _, support, reason in candidates:
-        if support["id"] in seen:
-            continue
-        seen.add(support["id"])
-        character = support.get("character") or "Neutral / monster"
-        teammate = (
-            " Â· teammate"
-            if support.get("character") not in (None, card.get("character"))
-            else ""
-        )
-        lines.append(
-            f"{emojis.get(support['id'], 'ðŸ§ª')} **{escape_markdown(support['name'])}** ({character}{teammate}) â€” {reason}.\n{with_elements(escape_markdown(' '.join(text_at(support).split())), support, emojis)}"
-        )
-        if len(seen) == 6:
-            break
-    if not seen:
-        lines.append(
-            "No specific setup pairing is covered by the current rules for this flask."
-        )
-    if attacks(text):
-        lines.extend(
-            (
-                "",
-                "**Infuser option:** Augmented adds 200% Power but locks the first activation. It delays the payoff; it is not a free opener.",
-            )
-        )
-    if card["name"] == "Explosion!":
-        lines.extend(
-            (
-                "",
-                "**Organ options (Artificer):** Cryomancer adds 100% Power per fresh lock on this flask; Pyromancer adds Power equal to your Burn. Choose one. Explosion hits your team too.",
-            )
-        )
-    elif card["name"] == "Wildfire":
-        lines.extend(
-            (
-                "",
-                "**Organ option:** Pyromancer makes your Burn also increase flask Power. Self-Burn still hurts you.",
-            )
-        )
-    lines.extend(
-        (
-            "",
-            "Setup suggestions, not a battle simulation. Support descriptions use their base levels. Random targets, conditional effects and infusers can change the result.",
-        )
-    )
-    return lines
 
 
 def message_pages(lines, limit=1850):

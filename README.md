@@ -15,15 +15,15 @@ A Discord bot for FLASK cards, infusers, monster fights, special encounters and 
 | Command | What it does |
 | --- | --- |
 | `!flask help` | Show help and examples. |
-| `!flask info Acidburn` | Show a flask emoji and description; use Show full image for its artwork. |
-| `!flask info Acidburn level 3` | Show a specific card level. |
+| `!flask Acidburn` | Show a flask emoji and description; use Show full image for its artwork. |
+| `!flask Acidburn level 3` | Show a specific card level. |
 | `!flask ranger void` | List matching flasks with emoji and descriptions, one per line. |
 | `!flask druid starting 4` | Only Druid flasks that start at level 4. Also available in the separate “Starts at level…” dropdown. |
 | `!flask ranger strength` / `!flask rogue health` | Filter by class and keyword. Also works with `!flask poison` or `!flask ranger void luck`. |
 | `!flask druid` / `!flask life` | Filter by any class or element. Use the controls for pages and levels. |
 | `!flask artificer damage` / `!flask artificer armor` / `!flask artificer shield` | Filter a class by !flask effects. `artifacter` and `strike` also work as aliases. |
-| `!flask info infuser Shielding` | Show an infuser and its effect. |
-| `!flask info infuser` | List all infusers. |
+| `!flask infuser Shielding` | Show an infuser and its effect. |
+| `!flask infusers` | List all infusers. |
 | `!flask organs` | List organ effects and team HP bonuses. |
 | `!flask organ Sentinel` | Show its image, effect, team health bonus and class restriction. |
 | `!flask monster Burning Witch` | Show each monster's mutation, base HP and !flask effects, including changing forms and random !flask pools. |
@@ -33,7 +33,6 @@ A Discord bot for FLASK cards, infusers, monster fights, special encounters and 
 | `!flask info flasks` | Browse all !flask cards. |
 | `!flask info monsters` / `!flask info encounters` | Browse monster fights or special encounters. |
 | `!flask party FB1.…` | Show a shared party. |
-| `!flask combo Wildfire` | Find supporting flasks and explain the interactions. Add `level 4` to choose a level. |
 | `!flask explain FB1.…` | Explain a party's flasks, organs, infusers, recognized interactions and cautions. JSON attachments also work. |
 
 `!flask organs` lists organ effects. Use `!flask rogue organs` (or any class) to list every organ that character can receive. Use `!flask organ <name>` for its image and details.
@@ -43,7 +42,7 @@ Flask descriptions show their element icons at the end.
 
 
 
-Use `!flask help filter` for keyword names and aliases. Flourish is healing each turn; Bolstering increases shield gained. Thorns means Spikes, Gambling means Gamble, and `ethernal` also finds Eternal. Stealth includes Strength-reducing effects; use `-strength` to list those alone.
+Search with keywords directly: `!flask rogue kunai`, `!flask ranger health`, `!flask artificer drone`, `!flask artificer heat` or `!flask artificer frost`. Flourish is healing each turn; Bolstering increases shield gained. Thorns means Spikes, Gambling means Gamble, and `ethernal` also finds Eternal. Stealth includes Strength-reducing effects; use `-strength` to list those alone.
 
 ## Share your party
 

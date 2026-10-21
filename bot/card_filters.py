@@ -25,6 +25,9 @@ KEYWORD_ALIASES = {
     "Gamble": ("gamble", "gambling"),
     "Luck": ("luck",),
     "Kunai": ("kunai",),
+    "Drone": ("drone", "drones"),
+    "Heat": ("heat",),
+    "Frost": ("frost", "cold"),
     "Totem": ("totem", "totems"),
     "Exhaust": ("exhaust",),
     "Armor": ("armor", "armour"),
@@ -40,8 +43,8 @@ KEYWORD_ALIASES = {
 }
 
 KEYWORD_PATTERNS = {
+    "Drone": r"\b(?:[DSH]-Drone|drones?)\b",
     "Health": r"\b(?:health|heal(?:s|ed|ing)?)\b",
-
     "Totem": r"\btotems?\b",
     "Burn": r"\bburn(?:ed|s|ing)?\b",
     "Poison": r"\bpoison(?:ed|s|ing)?\b",
@@ -123,7 +126,7 @@ def filter_names(catalog):
 
 
 def parse_filter(catalog, query):
-    query = re.sub(r"\bartifacter\b", "Artificer", query, flags=re.I)
+    query = re.sub(r"\b(?:artifacter|artrifacter)\b", "Artificer", query, flags=re.I)
     starting = re.search(r"\bstarting\s+(?:level\s+)?(\d+)\b", query, re.I)
     if starting:
         number = int(starting[1])
@@ -210,6 +213,7 @@ def card_pages(catalog, selection, emojis, level=None):
         return [heading + "No matching flasks for these filters and display level."]
     pages = []
     rows = []
+    row_limit = None if selection.keyword not in (None, "Damage", "Shield") else 30
     for card in cards:
         shown_level = card["available_level"] if level is None else level
         description = escape_markdown(
@@ -225,11 +229,14 @@ def card_pages(catalog, selection, emojis, level=None):
             f"{emojis.get(card['id'], '🧪')} **{escape_markdown(card['name'])}**"
             f" (Lv {shown_level}{character}) — {description}"
         )
-        if len(row) + len(heading) > 1900:
+        if len(row) + len(heading) > 1940:
             raise ValueError(
-                f"{card['name']} is too long for this list. Use flask info {card['name']}."
+                f"{card['name']} is too long for this list. Use !flask {card['name']}."
             )
-        if rows and len(heading) + sum(len(value) + 1 for value in [*rows, row]) > 1900:
+        if rows and (
+            (row_limit is not None and len(rows) >= row_limit)
+            or len(heading) + sum(len(value) + 1 for value in [*rows, row]) > 1940
+        ):
             pages.append(heading + "\n".join(rows))
             rows = []
         rows.append(row)

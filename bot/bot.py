@@ -12,7 +12,6 @@ from dataclasses import replace
 from io import BytesIO
 
 import discord
-from advice import combo_lines, message_pages
 from build_protocol import MAX_BUILD_BYTES, decode_build, decode_code
 from builds import BuildCatalog
 from card_emojis import CardEmojis
@@ -34,31 +33,29 @@ from party_explanation import explain_pages
 
 LOG = logging.getLogger("flask_bot")
 HELP = (
-    "What can I do for you?\n\n"
+    "**Pocket Cauldron**\n"
     "```text\n"
-    "help        Display help and examples.\n"
-    "info        Show a flask, infuser, fight, encounter, or organ.\n"
-    "monsters    List every monster fight.\n"
-    "encounters  List special encounters by biome.\n"
-    "organs      List organs and their effects.\n"
-    "filter      List flasks by class, element or keyword.\n"
-    "combo       Find setup partners for a flask.\n"
-    "explain     Explain your exported party and its interactions.\n"
-    "party       Display a party from a FLASK build code.\n"
+    "help        Help and examples.\n"
+    "infusers    List infusers.\n"
+    "monsters    List monster fights.\n"
+    "encounters  List encounters by biome.\n"
+    "organs      List organ effects and team health.\n"
+    "party       Show an exported build.\n"
+    "explain     Explain an exported build.\n"
     "```\n"
-    "**Browse:** `!flask info flasks` · `!flask info monsters` · `!flask info encounters` · `!flask info organs`\n\n"
-    "**Try:**\n"
-    "`!flask info Acidburn`\n"
-    "`!flask info infuser Shielding`\n"
-    "`!flask monster Burning Witch`\n"
-    "`!flask Witch Cauldron`\n"
-    "`!flask organ Sentinel`\n"
-    "`!flask ranger void`\n"
-    "`!flask ranger strength`\n\n"
-    "`!flask combo Wildfire`\n"
-    "Start commands with `!flask`. Slash versions are under `/flask`.\n\n"
-    "**How to export a build:**\n"
-    "Open FLASK Share Build, click Copy Build, then paste directly into Discord. That's it."
+    "**Examples**\n"
+    "`!flask Acidburn` — flask\n"
+    "`!flask infuser Shielding` — infuser\n"
+    "`!flask void` — element\n"
+    "`!flask Burning Witch` — monster fight\n"
+    "`!flask Witch Cauldron` — encounter\n"
+    "`!flask rogue organs` — compatible organs\n"
+    "`!flask rogue kunai` — class + keyword\n\n"
+    "**Search by keyword:** use any class with a keyword, e.g. "
+    "`!flask ranger health`, `!flask artificer drone`, `!flask artificer heat` or `!flask artificer frost`. "
+    "A class or element alone also works. Use the dropdowns to change levels.\n\n"
+    "**How to export a build:** Open FLASK Share Build, click Copy Build, "
+    "then paste directly into Discord. That's it."
 )
 
 
@@ -71,21 +68,16 @@ def help_text(topic=""):
             "You can paste the full copied `!flask party FB1.…` command after `!flask explain`.\n"
             "Shows flask roles, recognized interactions, organs, infusers and cautions. Base effects are explained; battle outcomes are not simulated."
         ),
-        "combo": (
-            "**combo — find supporting flasks**\n"
-            "`!flask combo Wildfire` or `!flask combo Explosion! level 4`\n"
-            "Shows setup partners and explains the interaction. Suggestions use released flasks only."
-        ),
         "info": (
             "**info — look up game content**\n"
             "`!flask info flasks` · `!flask info monsters` · `!flask info encounters`\n"
             "`!flask info Acidburn`\n`!flask info Acidburn level 3`\n"
-            "`!flask info infuser Shielding`\n"
-            "`!flask info infuser` lists every infuser. Card descriptions show base values."
+            "`!flask infuser Shielding`\n"
+            "`!flask infusers` lists every infuser. Card descriptions show base values."
         ),
         "infuser": (
-            "**Infusers**\n`!flask info infuser Shielding` shows its icon and effect.\n"
-            "`!flask info infuser` lists all infusers. Party results keep each infuser "
+            "**Infusers**\n`!flask infuser Shielding` shows its icon and effect.\n"
+            "`!flask infusers` lists all infusers. Party results keep each infuser "
             "attached to its flask; base effects and infuser effects are shown separately."
         ),
         "organ": (
@@ -96,7 +88,7 @@ def help_text(topic=""):
             "**Filter flasks**\n`!flask ranger void` lists Ranger's Void flasks with emoji and descriptions.\n"
             "Use any class and element, a class alone (`!flask druid`), or an element alone (`!flask life`).\n"
             "Filter keywords with `!flask ranger strength`, `!flask poison`, or `!flask ranger void luck`.\n"
-            "Keywords: Strength, Burn, Poison, Control, Spikes/Thorns, Stealth, Chain, Echo, Gamble/Gambling, Luck, Kunai, Totem/Totems, Exhaust, Armor, Lock, Eternal, Flourish, Regrowth, Burst and Bolstering.\n"
+            "Keywords: Drone, Heat, Frost, Health, Damage, Shield, Strength, Burn, Poison, Control, Spikes/Thorns, Stealth, Chain, Echo, Gamble/Gambling, Luck, Kunai, Totem/Totems, Exhaust, Armor, Lock, Eternal, Flourish, Regrowth, Burst and Bolstering.\n"
             "Stealth also includes Strength-reducing effects. Use `-strength` for those effects alone.\n"
             "Change levels with the dropdown or add `level 3`. Slash command: `/flask filter`."
             "\n`!flask druid starting 4` lists only flasks whose lowest available level is 4. "
@@ -121,6 +113,7 @@ def help_text(topic=""):
         "help": HELP,
     }
     topic = {
+        "infusers": "infuser",
         "monsters": "monster",
         "events": "event",
         "encounters": "event",
@@ -220,7 +213,7 @@ async def info_response(catalog, query, owner, send, level=None, emojis=None):
             for i in sorted(catalog.infusers.values(), key=lambda i: i["name"])
         )
         await send(
-            content=f"**All {len(catalog.infusers)} infusers**\n{names}\n\nExample: `!flask info infuser Shielding`"
+            content=f"**All {len(catalog.infusers)} infusers**\n{names}\n\nExample: `!flask infuser Shielding`"
         )
         return
     if not query:
@@ -321,68 +314,6 @@ class AdviceView(OwnedView):
 
     async def forwards(self, interaction):
         await self.change(interaction, 1)
-
-
-class ComboChoiceView(OwnedView):
-    def __init__(self, catalog, matches, emojis, owner, level):
-        super().__init__(owner)
-        selection = discord.ui.Select(
-            placeholder="Select a flask",
-            options=[
-                discord.SelectOption(label=match.item["name"][:100], value=match.key)
-                for match in matches[:25]
-            ],
-        )
-
-        async def selected(interaction):
-            await interaction.response.defer()
-            match = catalog.by_key[selection.values[0]]
-            try:
-                pages = message_pages(combo_lines(catalog, match.item, emojis, level))
-            except ValueError as exc:
-                await interaction.followup.send(str(exc), ephemeral=True)
-                return
-            view = AdviceView(pages, owner)
-            await interaction.edit_original_response(content=view.content(), view=view)
-
-        selection.callback = selected
-        self.add_item(selection)
-
-
-async def combo_response(catalog, query, emojis, owner, send, level=None):
-    if level is not None and level not in range(1, 5):
-        await send(content="Choose a flask level from 1 to 4.")
-        return
-    if not query.strip():
-        await send(content=help_text("combo"))
-        return
-    matches, exact = catalog.search(
-        query if query.startswith("card:") else "flask " + query
-    )
-    matches = [match for match in matches if match.kind == "card"]
-    if not matches:
-        await send(
-            content="No matching released flask found. Try `!flask combo Wildfire`."
-        )
-    elif exact and len(matches) == 1:
-        try:
-            view = AdviceView(
-                message_pages(combo_lines(catalog, matches[0].item, emojis, level)),
-                owner,
-            )
-        except ValueError as exc:
-            await send(content=str(exc))
-            return
-        await send(content=view.content(), view=view)
-    else:
-        await send(
-            content=(
-                "Exact match not found. Select a flask for combo suggestions:"
-                if not exact
-                else "Select a flask for combo suggestions:"
-            ),
-            view=ComboChoiceView(catalog, matches, emojis, owner, level),
-        )
 
 
 async def build_advice_response(
@@ -1273,6 +1204,15 @@ class FlaskBot(discord.Client):
                     self.card_emojis.values,
                 )
 
+            @parent.command(name="infusers", description="List infusers.")
+            async def infusers(interaction: discord.Interaction):
+                await info_response(
+                    self.catalog,
+                    "infusers",
+                    interaction.user.id,
+                    interaction.response.send_message,
+                )
+
             @parent.command(name="organs", description="List organs and their effects.")
             async def organs(
                 interaction: discord.Interaction, character: str | None = None
@@ -1374,37 +1314,6 @@ class FlaskBot(discord.Client):
                         interaction.followup.send,
                         code,
                     )
-
-        @group.command(
-            name="combo",
-            description="Find supporting flasks and explain their interactions.",
-        )
-        @app_commands.checks.cooldown(
-            1, 3.0, key=lambda interaction: interaction.user.id
-        )
-        async def combo(
-            interaction: discord.Interaction,
-            query: str,
-            level: app_commands.Range[int, 1, 4] | None = None,
-        ):
-            await interaction.response.defer(thinking=True)
-            await combo_response(
-                self.catalog,
-                query,
-                self.card_emojis.values,
-                interaction.user.id,
-                interaction.followup.send,
-                level,
-            )
-
-        @combo.autocomplete("query")
-        async def combo_autocomplete(interaction, current: str):
-            matches, _ = self.catalog.search("flask " + current)
-            return [
-                app_commands.Choice(name=m.item["name"][:100], value=m.key)
-                for m in matches[:25]
-                if m.kind == "card"
-            ]
 
         @group.command(
             name="explain",
@@ -1524,8 +1433,13 @@ class FlaskBot(discord.Client):
         if help_request:
             await message.channel.send(help_text(help_request[1] or ""))
             return
+        if re.fullmatch(r"\s*!flask\s+infusers?\s*", message.content, re.I):
+            await info_response(
+                self.catalog, "infusers", message.author.id, message.channel.send
+            )
+            return
         advice_request = re.fullmatch(
-            r"\s*!flask\s+(combo|explain)(?:\s+([\s\S]*?))?\s*",
+            r"\s*!flask\s+(explain)(?:\s+([\s\S]*?))?\s*",
             message.content,
             re.I,
         )
@@ -1535,29 +1449,16 @@ class FlaskBot(discord.Client):
                 return
             self.last_lookup[message.author.id] = now
             try:
-                if advice_request[1].lower() == "combo":
-                    query, level = parse_message(
-                        "!flask show " + (advice_request[2] or "")
-                    )
-                    await combo_response(
+                async with self.build_lock:
+                    await build_advice_response(
                         self.catalog,
-                        query,
+                        self.build_catalog,
+                        message.attachments[0] if message.attachments else None,
+                        advice_request[2],
                         self.card_emojis.values,
                         message.author.id,
                         message.channel.send,
-                        level,
                     )
-                else:
-                    async with self.build_lock:
-                        await build_advice_response(
-                            self.catalog,
-                            self.build_catalog,
-                            message.attachments[0] if message.attachments else None,
-                            advice_request[2],
-                            self.card_emojis.values,
-                            message.author.id,
-                            message.channel.send,
-                        )
             except discord.Forbidden:
                 LOG.warning("Cannot send advice: check channel permissions.")
             return
