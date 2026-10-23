@@ -40,7 +40,7 @@ A Discord bot for FLASK cards, infusers, monster fights, special encounters and 
 
 Slash commands are also available under `/flask`.
 Flask descriptions show their element icons at the end.
-Flask search pages use up to two consecutive messages, with navigation and level controls on the last message.
+Flask search pages use up to three consecutive messages, with navigation and level controls on the last message.
 
 
 

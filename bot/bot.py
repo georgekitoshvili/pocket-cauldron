@@ -361,7 +361,7 @@ class CardListView(OwnedView):
         self.emojis = emojis
         self.level = level
         self.index = 0
-        self.first_message = None
+        self.leading_messages = []
         self.rebuild_pages()
         self.previous = discord.ui.Button(label="Previous", row=0)
         self.next = discord.ui.Button(label="Next", row=0)
@@ -418,10 +418,10 @@ class CardListView(OwnedView):
         ]
         note = "Base levels" if self.level is None else f"Level {self.level}"
         self.message_pages = []
-        for offset in range(0, len(bodies), 2):
-            messages = bodies[offset : offset + 2]
-            if len(messages) == 2:
-                messages[1] = messages[1].split("\n\n", 1)[1]
+        for offset in range(0, len(bodies), 3):
+            messages = bodies[offset : offset + 3]
+            for index in range(1, len(messages)):
+                messages[index] = messages[index].split("\n\n", 1)[1]
             self.message_pages.append(messages)
         count = len(self.message_pages)
         for index, messages in enumerate(self.message_pages, 1):
@@ -430,9 +430,32 @@ class CardListView(OwnedView):
 
     async def send(self, send):
         messages = self.message_pages[self.index]
-        if len(messages) == 2:
-            self.first_message = await send(content=messages[0])
+        for content in messages[:-1]:
+            self.leading_messages.append(await send(content=content))
         await send(content=messages[-1], view=self)
+
+    async def clear_leading_messages(self):
+        for message in self.leading_messages:
+            try:
+                await message.delete()
+            except discord.NotFound:
+                pass
+        self.leading_messages.clear()
+
+    async def replace_messages(self, interaction):
+        messages = self.message_pages[self.index]
+        await self.clear_leading_messages()
+        if len(messages) == 1:
+            await interaction.edit_original_response(content=messages[0], view=self)
+            return
+        self.leading_messages.append(
+            await interaction.edit_original_response(content=messages[0], view=None)
+        )
+        for content in messages[1:-1]:
+            self.leading_messages.append(
+                await interaction.followup.send(content=content)
+            )
+        await interaction.followup.send(content=messages[-1], view=self)
 
     def controls(self):
         self.counter.label = f"{self.index + 1} / {len(self.pages)}"
@@ -467,23 +490,14 @@ class CardListView(OwnedView):
     async def refresh(self, interaction):
         self.controls()
         messages = self.message_pages[self.index]
-        if len(messages) == 2 and self.first_message is None:
+        if len(self.leading_messages) != len(messages) - 1:
             await interaction.response.defer()
-            self.first_message = await interaction.edit_original_response(
-                content=messages[0], view=None
-            )
-            await interaction.followup.send(content=messages[-1], view=self)
+            await self.replace_messages(interaction)
             return
-        if self.first_message is not None:
+        if self.leading_messages:
             await interaction.response.defer()
-            if len(messages) == 2:
-                await self.first_message.edit(content=messages[0])
-            else:
-                try:
-                    await self.first_message.delete()
-                except discord.NotFound:
-                    pass
-                self.first_message = None
+            for message, content in zip(self.leading_messages, messages[:-1]):
+                await message.edit(content=content)
             await interaction.edit_original_response(content=messages[-1], view=self)
             return
         await interaction.response.edit_message(
@@ -545,12 +559,9 @@ class ElementsView(OwnedView):
 
         async def show_elements(interaction):
             menu = ElementsView(self.catalog, self.owner, self.emojis)
-            if view.first_message is not None:
+            if view.leading_messages:
                 await interaction.response.defer()
-                try:
-                    await view.first_message.delete()
-                except discord.NotFound:
-                    pass
+                await view.clear_leading_messages()
                 await interaction.edit_original_response(
                     content=menu.content(), view=menu
                 )
@@ -561,13 +572,7 @@ class ElementsView(OwnedView):
 
         back.callback = show_elements
         view.add_item(back)
-        if len(view.message_pages[0]) == 2:
-            view.first_message = await interaction.edit_original_response(
-                content=view.message_pages[0][0], view=None
-            )
-            await interaction.followup.send(content=view.pages[0], view=view)
-        else:
-            await interaction.edit_original_response(content=view.pages[0], view=view)
+        await view.replace_messages(interaction)
         self.stop()
 
 
