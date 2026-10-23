@@ -24,6 +24,7 @@ A Discord bot for FLASK cards, infusers, monster fights, special encounters and 
 | `!flask artificer damage` / `!flask artificer armor` / `!flask artificer shield` | Filter a class by !flask effects. `artifacter` and `strike` also work as aliases. |
 | `!flask infuser Shielding` | Show an infuser and its effect. |
 | `!flask infusers` | List all infusers. |
+| `!flask elements` | Browse element emojis and select an element to see its flasks. |
 | `!flask organs` | List organ effects and team HP bonuses. |
 | `!flask organ Sentinel` | Show its image, effect, team health bonus and class restriction. |
 | `!flask monster Burning Witch` | Show each monster's mutation, base HP and !flask effects, including changing forms and random !flask pools. |
@@ -42,7 +43,7 @@ Flask descriptions show their element icons at the end.
 
 
 
-Search with keywords directly: `!flask rogue kunai`, `!flask ranger health`, `!flask artificer drone`, `!flask artificer heat` or `!flask artificer frost`. Flourish is healing each turn; Bolstering increases shield gained. Thorns means Spikes, Gambling means Gamble, and `ethernal` also finds Eternal. Stealth includes Strength-reducing effects; use `-strength` to list those alone.
+Search with keywords directly: `!flask rogue kunai`, `!flask ranger health`, `!flask artificer drone`, `!flask artificer heat` or `!flask artificer frost`. Flourish is healing each turn; Bolstering increases shield gained. Fire means Burn. Spirit searches include `!flask druid spirits`, `!flask druid beetle`, `!flask druid jaybird`, `!flask druid viper` and `!flask druid wolverine`. Use `!flask warrior taunt` for Taunt. Thorns means Spikes, Gambling means Gamble, and `ethernal` also finds Eternal. Stealth includes Strength-reducing effects; use `-strength` to list those alone.
 
 ## Share your party
 

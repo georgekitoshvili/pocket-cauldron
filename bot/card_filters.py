@@ -9,9 +9,15 @@ from lookup import normalize
 
 KEYWORD_ALIASES = {
     "Strength": ("strength",),
-    "Burn": ("burn",),
+    "Burn": ("burn", "fire"),
     "Poison": ("poison",),
     "Control": ("control",),
+    "Taunt": ("taunt",),
+    "Spirit": ("spirit", "spirits"),
+    "Beetle Spirit": ("beetle spirit", "beetle"),
+    "Jaybird Spirit": ("jaybird spirit", "jaybird"),
+    "Viper Spirit": ("viper spirit", "viper"),
+    "Wolverine Spirit": ("wolverine spirit", "wolverine"),
     "Spikes": ("spikes", "spike", "thorns", "thorn"),
     "Stealth": ("stealth",),
     "Negative Strength": (
@@ -43,6 +49,8 @@ KEYWORD_ALIASES = {
 }
 
 KEYWORD_PATTERNS = {
+    "Spirit": r"\bspirits?\b",
+    "Taunt": r"\btaunts?\b",
     "Drone": r"\b(?:[DSH]-Drone|drones?)\b",
     "Health": r"\b(?:health|heal(?:s|ed|ing)?)\b",
     "Totem": r"\btotems?\b",

@@ -37,6 +37,7 @@ HELP = (
     "```text\n"
     "help        Help and examples.\n"
     "infusers    List infusers.\n"
+    "elements    Browse elements and their flasks.\n"
     "monsters    List monster fights.\n"
     "encounters  List encounters by biome.\n"
     "organs      List organ effects and team health.\n"
@@ -53,6 +54,7 @@ HELP = (
     "`!flask rogue kunai` — class + keyword\n\n"
     "**Search by keyword:** use any class with a keyword, e.g. "
     "`!flask ranger health`, `!flask artificer drone`, `!flask artificer heat` or `!flask artificer frost`. "
+    "Try `!flask druid beetle`, `!flask druid spirits` or `!flask warrior taunt`. "
     "A class or element alone also works. Use the dropdowns to change levels.\n\n"
     "**How to export a build:** Open FLASK Share Build, click Copy Build, "
     "then paste directly into Discord. That's it."
@@ -88,7 +90,7 @@ def help_text(topic=""):
             "**Filter flasks**\n`!flask ranger void` lists Ranger's Void flasks with emoji and descriptions.\n"
             "Use any class and element, a class alone (`!flask druid`), or an element alone (`!flask life`).\n"
             "Filter keywords with `!flask ranger strength`, `!flask poison`, or `!flask ranger void luck`.\n"
-            "Keywords: Drone, Heat, Frost, Health, Damage, Shield, Strength, Burn, Poison, Control, Spikes/Thorns, Stealth, Chain, Echo, Gamble/Gambling, Luck, Kunai, Totem/Totems, Exhaust, Armor, Lock, Eternal, Flourish, Regrowth, Burst and Bolstering.\n"
+            "Keywords: Taunt, Spirit/Spirits, Beetle, Jaybird, Viper, Wolverine, Drone, Heat, Frost, Health, Damage, Shield, Strength, Burn, Poison, Control, Spikes/Thorns, Stealth, Chain, Echo, Gamble/Gambling, Luck, Kunai, Totem/Totems, Exhaust, Armor, Lock, Eternal, Flourish, Regrowth, Burst and Bolstering.\n"
             "Stealth also includes Strength-reducing effects. Use `-strength` for those effects alone.\n"
             "Change levels with the dropdown or add `level 3`. Slash command: `/flask filter`."
             "\n`!flask druid starting 4` lists only flasks whose lowest available level is 4. "
@@ -200,6 +202,9 @@ async def list_response(catalog, kind, owner, send, emojis=None, character=None)
 
 async def info_response(catalog, query, owner, send, level=None, emojis=None):
     query = query.strip()
+    if re.sub(r"^info\s+", "", query, flags=re.I).lower() == "elements":
+        await elements_response(catalog, owner, send, emojis)
+        return
     character = organ_character(catalog, query)
     if character:
         await list_response(catalog, "organ", owner, send, emojis, character)
@@ -448,6 +453,68 @@ async def filter_response(catalog, selection, emojis, owner, send, level=None):
         await send(content=str(exc))
         return
     await send(content=view.pages[0], view=view)
+
+
+class ElementsView(OwnedView):
+    def __init__(self, catalog, owner, emojis=None):
+        super().__init__(owner)
+        self.catalog = catalog
+        self.emojis = (
+            emojis if emojis is not None else getattr(catalog, "emoji_values", {})
+        )
+        _, self.names = filter_names(catalog)
+        self.select = discord.ui.Select(
+            placeholder="Select an element",
+            options=[
+                discord.SelectOption(
+                    label=name,
+                    value=name,
+                    emoji=self.emojis.get("element:" + name),
+                )
+                for name in self.names
+            ],
+        )
+        self.select.callback = self.pick
+        self.add_item(self.select)
+
+    def content(self):
+        entries = [
+            f"{self.emojis.get('element:' + name, '')} **{name}**".strip()
+            for name in self.names
+        ]
+        return (
+            "**Elements**\n"
+            + " · ".join(entries)
+            + "\nSelect an element to browse its flasks."
+        )
+
+    async def pick(self, interaction):
+        await interaction.response.defer()
+        view = CardListView(
+            self.catalog,
+            CardFilter(element=self.select.values[0]),
+            self.emojis,
+            self.owner,
+        )
+        back = discord.ui.Button(label="Elements", row=3)
+
+        async def show_elements(interaction):
+            menu = ElementsView(self.catalog, self.owner, self.emojis)
+            await interaction.response.edit_message(content=menu.content(), view=menu)
+
+        back.callback = show_elements
+        view.add_item(back)
+        await interaction.edit_original_response(content=view.pages[0], view=view)
+        self.stop()
+
+
+async def elements_response(catalog, owner, send, emojis=None):
+    _, names = filter_names(catalog)
+    if not names:
+        await send(content="No elements are available in the current library.")
+        return
+    view = ElementsView(catalog, owner, emojis)
+    await send(content=view.content(), view=view)
 
 
 class DetailView(OwnedView):
@@ -717,6 +784,9 @@ class ResultsView(OwnedView):
 
 async def lookup_response(catalog, query, owner, send, level=None, emojis=None):
     query = query.strip()
+    if re.sub(r"^info\s+", "", query, flags=re.I).lower() == "elements":
+        await elements_response(catalog, owner, send, emojis)
+        return
     character = organ_character(catalog, query)
     if character:
         await list_response(catalog, "organ", owner, send, emojis, character)
@@ -1199,6 +1269,17 @@ class FlaskBot(discord.Client):
                 await list_response(
                     self.catalog,
                     "monster",
+                    interaction.user.id,
+                    interaction.response.send_message,
+                    self.card_emojis.values,
+                )
+
+            @parent.command(
+                name="elements", description="Browse elements and their flasks."
+            )
+            async def elements(interaction: discord.Interaction):
+                await elements_response(
+                    self.catalog,
                     interaction.user.id,
                     interaction.response.send_message,
                     self.card_emojis.values,
