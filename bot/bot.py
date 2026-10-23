@@ -361,7 +361,8 @@ class CardListView(OwnedView):
         self.emojis = emojis
         self.level = level
         self.index = 0
-        self.pages = card_pages(catalog, selection, emojis, level)
+        self.first_message = None
+        self.rebuild_pages()
         self.previous = discord.ui.Button(label="Previous", row=0)
         self.next = discord.ui.Button(label="Next", row=0)
         self.counter = discord.ui.Button(disabled=True, row=0)
@@ -409,6 +410,30 @@ class CardListView(OwnedView):
         self.add_item(self.starting_select)
         self.controls()
 
+    def rebuild_pages(self):
+        chunks = card_pages(self.catalog, self.selection, self.emojis, self.level)
+        bodies = [
+            chunk.rsplit("\n\n", 1)[0] if " · Base values · Page " in chunk else chunk
+            for chunk in chunks
+        ]
+        note = "Base levels" if self.level is None else f"Level {self.level}"
+        self.message_pages = []
+        for offset in range(0, len(bodies), 2):
+            messages = bodies[offset : offset + 2]
+            if len(messages) == 2:
+                messages[1] = messages[1].split("\n\n", 1)[1]
+            self.message_pages.append(messages)
+        count = len(self.message_pages)
+        for index, messages in enumerate(self.message_pages, 1):
+            messages[-1] += f"\n\n{note} · Base values · Page {index}/{count}"
+        self.pages = [messages[-1] for messages in self.message_pages]
+
+    async def send(self, send):
+        messages = self.message_pages[self.index]
+        if len(messages) == 2:
+            self.first_message = await send(content=messages[0])
+        await send(content=messages[-1], view=self)
+
     def controls(self):
         self.counter.label = f"{self.index + 1} / {len(self.pages)}"
         self.previous.disabled = self.next.disabled = len(self.pages) == 1
@@ -425,7 +450,7 @@ class CardListView(OwnedView):
         value = int(self.level_select.values[0])
         self.level = value or None
         self.index = 0
-        self.pages = card_pages(self.catalog, self.selection, self.emojis, self.level)
+        self.rebuild_pages()
         for option in self.level_select.options:
             option.default = int(option.value) == value
         await self.refresh(interaction)
@@ -434,13 +459,33 @@ class CardListView(OwnedView):
         value = int(self.starting_select.values[0])
         self.selection = replace(self.selection, starting_level=value or None)
         self.index = 0
-        self.pages = card_pages(self.catalog, self.selection, self.emojis, self.level)
+        self.rebuild_pages()
         for option in self.starting_select.options:
             option.default = int(option.value) == value
         await self.refresh(interaction)
 
     async def refresh(self, interaction):
         self.controls()
+        messages = self.message_pages[self.index]
+        if len(messages) == 2 and self.first_message is None:
+            await interaction.response.defer()
+            self.first_message = await interaction.edit_original_response(
+                content=messages[0], view=None
+            )
+            await interaction.followup.send(content=messages[-1], view=self)
+            return
+        if self.first_message is not None:
+            await interaction.response.defer()
+            if len(messages) == 2:
+                await self.first_message.edit(content=messages[0])
+            else:
+                try:
+                    await self.first_message.delete()
+                except discord.NotFound:
+                    pass
+                self.first_message = None
+            await interaction.edit_original_response(content=messages[-1], view=self)
+            return
         await interaction.response.edit_message(
             content=self.pages[self.index], view=self
         )
@@ -452,7 +497,7 @@ async def filter_response(catalog, selection, emojis, owner, send, level=None):
     except ValueError as exc:
         await send(content=str(exc))
         return
-    await send(content=view.pages[0], view=view)
+    await view.send(send)
 
 
 class ElementsView(OwnedView):
@@ -500,11 +545,29 @@ class ElementsView(OwnedView):
 
         async def show_elements(interaction):
             menu = ElementsView(self.catalog, self.owner, self.emojis)
+            if view.first_message is not None:
+                await interaction.response.defer()
+                try:
+                    await view.first_message.delete()
+                except discord.NotFound:
+                    pass
+                await interaction.edit_original_response(
+                    content=menu.content(), view=menu
+                )
+                view.stop()
+                return
             await interaction.response.edit_message(content=menu.content(), view=menu)
+            view.stop()
 
         back.callback = show_elements
         view.add_item(back)
-        await interaction.edit_original_response(content=view.pages[0], view=view)
+        if len(view.message_pages[0]) == 2:
+            view.first_message = await interaction.edit_original_response(
+                content=view.message_pages[0][0], view=None
+            )
+            await interaction.followup.send(content=view.pages[0], view=view)
+        else:
+            await interaction.edit_original_response(content=view.pages[0], view=view)
         self.stop()
 
 
