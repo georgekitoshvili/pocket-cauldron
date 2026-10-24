@@ -9,6 +9,7 @@ from lookup import normalize
 
 KEYWORD_ALIASES = {
     "Strength": ("strength",),
+    "Focus": ("focus",),
     "Burn": ("burn", "fire"),
     "Poison": ("poison",),
     "Control": ("control",),
