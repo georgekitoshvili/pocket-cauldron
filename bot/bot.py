@@ -84,7 +84,7 @@ def help_text(topic=""):
         ),
         "organ": (
             "**Organs**\n`!flask organs` lists all organs with effects.\n`!flask rogue organs` lists every organ Rogue can receive, including unrestricted organs.\n"
-            "`!flask organ Sentinel` shows its image, effect, team health bonus and class restriction."
+            "`!flask organ Sentinel` shows its effect and team health bonus."
         ),
         "filter": (
             "**Filter flasks**\n`!flask ranger void` lists Ranger's Void flasks with emoji and descriptions.\n"
@@ -197,7 +197,7 @@ async def list_response(catalog, kind, owner, send, emojis=None, character=None)
         await send(content=f"No {title} are available in the current library.")
         return
     view = ResultsView(catalog, matches, owner, list_title=title, emojis=emojis)
-    await send(content=view.list_content(), view=view)
+    await view.send(send)
 
 
 async def info_response(catalog, query, owner, send, level=None, emojis=None):
@@ -353,7 +353,38 @@ async def build_advice_response(
     await send(content=view.content(), view=view)
 
 
-class CardListView(OwnedView):
+class MessagePagesView(OwnedView):
+    async def send(self, send):
+        messages = self.message_pages[self.index]
+        for content in messages[:-1]:
+            self.leading_messages.append(await send(content=content))
+        await send(content=messages[-1], view=self)
+
+    async def clear_leading_messages(self):
+        for message in self.leading_messages:
+            try:
+                await message.delete()
+            except discord.NotFound:
+                pass
+        self.leading_messages.clear()
+
+    async def replace_messages(self, interaction):
+        messages = self.message_pages[self.index]
+        await self.clear_leading_messages()
+        if len(messages) == 1:
+            await interaction.edit_original_response(content=messages[0], view=self)
+            return
+        self.leading_messages.append(
+            await interaction.edit_original_response(content=messages[0], view=None)
+        )
+        for content in messages[1:-1]:
+            self.leading_messages.append(
+                await interaction.followup.send(content=content)
+            )
+        await interaction.followup.send(content=messages[-1], view=self)
+
+
+class CardListView(MessagePagesView):
     def __init__(self, catalog, selection, emojis, owner, level=None):
         super().__init__(owner)
         self.catalog = catalog
@@ -427,35 +458,6 @@ class CardListView(OwnedView):
         for index, messages in enumerate(self.message_pages, 1):
             messages[-1] += f"\n\n{note} · Base values · Page {index}/{count}"
         self.pages = [messages[-1] for messages in self.message_pages]
-
-    async def send(self, send):
-        messages = self.message_pages[self.index]
-        for content in messages[:-1]:
-            self.leading_messages.append(await send(content=content))
-        await send(content=messages[-1], view=self)
-
-    async def clear_leading_messages(self):
-        for message in self.leading_messages:
-            try:
-                await message.delete()
-            except discord.NotFound:
-                pass
-        self.leading_messages.clear()
-
-    async def replace_messages(self, interaction):
-        messages = self.message_pages[self.index]
-        await self.clear_leading_messages()
-        if len(messages) == 1:
-            await interaction.edit_original_response(content=messages[0], view=self)
-            return
-        self.leading_messages.append(
-            await interaction.edit_original_response(content=messages[0], view=None)
-        )
-        for content in messages[1:-1]:
-            self.leading_messages.append(
-                await interaction.followup.send(content=content)
-            )
-        await interaction.followup.send(content=messages[-1], view=self)
 
     def controls(self):
         self.counter.label = f"{self.index + 1} / {len(self.pages)}"
@@ -670,7 +672,7 @@ class DetailView(OwnedView):
             return
         if hasattr(self, "counter"):
             self.counter.label = (
-                f"{self.page_index+1} / {self.catalog.pages(self.match)}"
+                f"{self.page_index + 1} / {self.catalog.pages(self.match)}"
             )
         embeds, files = await asyncio.to_thread(
             payload, self.catalog, self.match, self.page_index, self.level
@@ -684,15 +686,9 @@ class DetailView(OwnedView):
                 file.close()
 
 
-class ResultsView(OwnedView):
+class ResultsView(MessagePagesView):
     def __init__(
-        self,
-        catalog: Catalog,
-        matches: list[Match],
-        owner: int,
-        level=None,
-        list_title=None,
-        emojis=None,
+        self, catalog, matches, owner, level=None, list_title=None, emojis=None
     ):
         super().__init__(owner)
         self.catalog = catalog
@@ -703,114 +699,121 @@ class ResultsView(OwnedView):
             emojis if emojis is not None else getattr(catalog, "emoji_values", {})
         )
         self.index = 0
-        self.organ_list = bool(list_title) and all(
-            match.kind == "organ" for match in matches
-        )
+        self.leading_messages = []
+        self.organ_list = bool(list_title) and all(m.kind == "organ" for m in matches)
         self.result_pages = []
-        page = []
+        self.message_pages = []
+        page, chunks, lines = [], [], []
         size = 0
+        previous_biome = None
+        limit = 2 if self.organ_list else 3
         for match in matches:
-            line_size = len(result_line(match, self.emojis)) + 2
-            if page and (
-                len(page) == (8 if self.organ_list else 25) or size + line_size > 1700
-            ):
+            line = result_line(match, self.emojis)
+            biome = match.item.get("biome")
+            if biome is not None and biome != previous_biome:
+                line = f"\n**Biome {biome}**\n{line}"
+                previous_biome = biome
+            if lines and size + len(line) + 1 > 1700:
+                chunks.append("\n".join(lines))
+                lines, size = [], 0
+            if page and (len(page) == 25 or len(chunks) == limit):
+                if lines:
+                    chunks.append("\n".join(lines))
                 self.result_pages.append(page)
-                page = []
-                size = 0
+                self.message_pages.append(chunks)
+                page, chunks, lines, size = [], [], [], 0
             page.append(match)
-            size += line_size
+            lines.append(line)
+            size += len(line) + 1
         if page:
+            if lines:
+                chunks.append("\n".join(lines))
             self.result_pages.append(page)
-        kinds = {match.kind for match in matches}
-        placeholder = (
+            self.message_pages.append(chunks)
+        kinds = {m.kind for m in matches}
+        noun = (
             {
-                "card": "Select a flask",
-                "monster": "Select a monster fight",
-                "infuser": "Select an infuser",
-                "event": "Select an encounter",
-                "organ": "Select an organ",
-            }.get(next(iter(kinds)), "Select a result")
+                "card": "flask",
+                "monster": "monster fight",
+                "infuser": "infuser",
+                "event": "encounter",
+                "organ": "organ",
+            }.get(next(iter(kinds)), "result")
             if len(kinds) == 1
-            else "Select a result"
+            else "result"
         )
-        self.select = None
-        if not self.organ_list:
-            self.select = discord.ui.Select(placeholder=placeholder)
-            self.select.callback = self.pick
-            self.add_item(self.select)
+        self.select = discord.ui.Select(
+            placeholder=f"Select an {noun}"
+            if noun in ("organ", "encounter", "infuser")
+            else f"Select a {noun}",
+            row=0,
+        )
+        self.select.callback = self.pick
+        self.add_item(self.select)
         if len(self.result_pages) > 1:
-            prev = discord.ui.Button(
-                label="Previous" if self.organ_list else "Previous results", row=1
-            )
-            nxt = discord.ui.Button(
-                label="Next" if self.organ_list else "More results", row=1
-            )
-            if self.organ_list:
-                self.organ_previous = prev
-                self.organ_next = nxt
-                self.organ_counter = discord.ui.Button(disabled=True, row=1)
-
-            async def backwards(interaction):
-                self.index = (self.index - 1) % len(self.result_pages)
-                self.options()
-                await interaction.response.edit_message(
-                    **({"content": self.list_content()} if self.list_title else {}),
-                    view=self,
+            self.previous = discord.ui.Button(label="Previous", row=1)
+            self.counter = discord.ui.Button(disabled=True, row=1)
+            self.next = discord.ui.Button(label="Next", row=1)
+            self.previous.callback = self.backwards
+            self.next.callback = self.forwards
+            for button in (self.previous, self.counter, self.next):
+                self.add_item(button)
+        for index, messages in enumerate(self.message_pages, 1):
+            if list_title:
+                title = list_title[0].upper() + list_title[1:]
+                heading = (
+                    f"**{title} · {len(matches)} total**"
+                    if self.organ_list
+                    else f"**All {len(matches)} {list_title}**"
                 )
-
-            async def forwards(interaction):
-                self.index = (self.index + 1) % len(self.result_pages)
-                self.options()
-                await interaction.response.edit_message(
-                    **({"content": self.list_content()} if self.list_title else {}),
-                    view=self,
-                )
-
-            prev.callback = backwards
-            nxt.callback = forwards
-            self.add_item(prev)
-            if self.organ_list:
-                self.add_item(self.organ_counter)
-            self.add_item(nxt)
+                messages[0] = heading + "\n" + messages[0]
+                messages[-1] += f"\n\nPage {index}/{len(self.message_pages)}"
         self.options()
 
     def list_content(self):
-        page_count = len(self.result_pages)
-        lines = []
-        previous_biome = None
-        for match in self.result_pages[self.index]:
-            biome = match.item.get("biome")
-            if biome is not None and biome != previous_biome:
-                lines.append(f"\n**Biome {biome}**")
-                previous_biome = biome
-            lines.append(result_line(match, self.emojis))
-        if self.organ_list:
-            title = self.list_title[0].upper() + self.list_title[1:]
-            return f"**{title} · {len(self.matches)} total**\n" + "\n".join(lines)
-        names = "\n".join(lines)
-        content = f"**All {len(self.matches)} {self.list_title}** · Page {self.index + 1}/{page_count}\n{names}"
-        if self.select is not None:
-            content += f"\n\n{self.select.placeholder} below to view its details."
-        return content
+        return self.message_pages[self.index][-1]
 
     def options(self):
-        if hasattr(self, "organ_counter"):
-            self.organ_counter.label = f"{self.index + 1}/{len(self.result_pages)}"
-            self.organ_previous.disabled = self.index == 0
-            self.organ_next.disabled = self.index == len(self.result_pages) - 1
-        if self.select is None:
-            return
+        if hasattr(self, "counter"):
+            self.counter.label = f"{self.index + 1}/{len(self.result_pages)}"
+            self.previous.disabled = self.index == 0
+            self.next.disabled = self.index == len(self.result_pages) - 1
         self.select.options = [
-            discord.SelectOption(
-                label=m.label[:100],
-                value=m.key,
-            )
+            discord.SelectOption(label=m.label[:100], value=m.key)
             for m in self.result_pages[self.index]
         ]
+
+    async def backwards(self, interaction):
+        self.index = max(0, self.index - 1)
+        await self.refresh(interaction)
+
+    async def forwards(self, interaction):
+        self.index = min(len(self.result_pages) - 1, self.index + 1)
+        await self.refresh(interaction)
+
+    async def refresh(self, interaction):
+        self.options()
+        await interaction.response.defer()
+        messages = self.message_pages[self.index]
+        if len(self.leading_messages) != len(messages) - 1:
+            await self.replace_messages(interaction)
+        else:
+            for message, content in zip(self.leading_messages, messages[:-1]):
+                await message.edit(content=content)
+            await interaction.edit_original_response(
+                content=self.list_content(), view=self
+            )
 
     async def pick(self, interaction):
         match = self.catalog.by_key[self.select.values[0]]
         await interaction.response.defer()
+        await self.clear_leading_messages()
+        if match.kind == "organ":
+            await interaction.edit_original_response(
+                content=result_line(match), embeds=[], attachments=[], view=None
+            )
+            self.stop()
+            return
         if match.kind == "monster":
             try:
                 view = AdviceView(
@@ -879,6 +882,9 @@ async def lookup_response(catalog, query, owner, send, level=None, emojis=None):
         )
         return
     if exact and len(matches) == 1:
+        if matches[0].kind == "organ":
+            await send(content=result_line(matches[0]))
+            return
         if matches[0].kind == "monster":
             try:
                 view = AdviceView(
@@ -977,7 +983,7 @@ class BuildView(OwnedView):
         await interaction.response.defer()
         character = self.build["build"]["characters"][char_index]
         header = discord.Embed(
-            title=f"{char_index+1}. {self.build_catalog.name(character['id'])}",
+            title=f"{char_index + 1}. {self.build_catalog.name(character['id'])}",
             description=self.build_catalog.character_text(character)[:2200],
             colour=0x9569E8,
         )
@@ -1392,7 +1398,7 @@ class FlaskBot(discord.Client):
 
             @parent.command(
                 name="organ",
-                description="Show an organ's effect, image and class restriction.",
+                description="Show an organ's effect and team health bonus.",
             )
             async def organ(interaction: discord.Interaction, query: str):
                 await interaction.response.defer(thinking=True)

@@ -26,7 +26,7 @@ A Discord bot for FLASK cards, infusers, monster fights, special encounters and 
 | `!flask infusers` | List all infusers. |
 | `!flask elements` | Browse element emojis and select an element to see its flasks. |
 | `!flask organs` | List organ effects and team HP bonuses. |
-| `!flask organ Sentinel` | Show its image, effect, team health bonus and class restriction. |
+| `!flask organ Sentinel` | Show its effect and team health bonus. |
 | `!flask monster Burning Witch` | Show each monster's mutation, base HP and !flask effects, including changing forms and random !flask pools. |
 | `!flask monsters` | List every monster fight. |
 | `!flask encounters` | List the two special encounters in each biome. |
@@ -36,7 +36,7 @@ A Discord bot for FLASK cards, infusers, monster fights, special encounters and 
 | `!flask party FB1.…` | Show a shared party. |
 | `!flask explain FB1.…` | Explain a party's flasks, organs, infusers, recognized interactions and cautions. JSON attachments also work. |
 
-`!flask organs` lists organ effects. Use `!flask rogue organs` (or any class) to list every organ that character can receive. Use `!flask organ <name>` for its image and details.
+`!flask organs` lists organ effects. Use `!flask rogue organs` (or any class) to list every organ that character can receive. Use `!flask organ <name>` for its effect and team health bonus.
 
 Slash commands are also available under `/flask`.
 Flask descriptions show their element icons at the end.
@@ -73,3 +73,5 @@ On Linux or a hosting service, use the **bot** folder as the working directory, 
 With Python installed, open the **exporter** folder and run **Start Exporter.cmd** or `python share_app.py`.
 
 Unofficial community project. FLASK content belongs to its respective creators.
+
+Organ lists use up to two consecutive messages, with organ selection and page controls on the last message.
