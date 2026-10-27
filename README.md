@@ -39,6 +39,7 @@ A Discord bot for FLASK cards, infusers, monster fights, special encounters and 
 `!flask organs` lists organ effects. Use `!flask rogue organs` (or any class) to list every organ that character can receive. Use `!flask organ <name>` for its effect and team health bonus.
 
 Slash commands are also available under `/flask`.
+Search individual drone types with `!flask artificer d-drone`, `s-drone`, `h-drone` or `r-drone`. These match descriptions mentioning that type; `!flask artificer drone` includes general drone effects too.
 Flask descriptions show their element icons at the end.
 Flask search pages use up to three consecutive messages, with navigation and level controls on the last message.
 

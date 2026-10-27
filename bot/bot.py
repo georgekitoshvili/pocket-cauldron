@@ -54,6 +54,7 @@ HELP = (
     "`!flask rogue kunai` — class + keyword\n\n"
     "**Search by keyword:** use any class with a keyword, e.g. "
     "`!flask ranger health`, `!flask artificer drone`, `!flask artificer heat` or `!flask artificer frost`. "
+    "Drone types: `!flask artificer d-drone`, `s-drone`, `h-drone` or `r-drone`. "
     "Try `!flask druid beetle`, `!flask druid spirits` or `!flask warrior taunt`. "
     "A class or element alone also works. Use the dropdowns to change levels.\n\n"
     "**How to export a build:** Open FLASK Share Build, click Copy Build, "
