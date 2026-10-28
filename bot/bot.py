@@ -713,7 +713,7 @@ class ResultsView(MessagePagesView):
         page, chunks, lines = [], [], []
         size = 0
         previous_biome = None
-        limit = 2 if self.organ_list else 3
+        limit = 3
         for match in matches:
             line = result_line(match, self.emojis)
             biome = match.item.get("biome")
