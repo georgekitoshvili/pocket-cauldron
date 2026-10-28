@@ -161,9 +161,15 @@ def result_line(match, emojis=None):
     if match.kind != "organ":
         return match.label
     description = " ".join(match.item["description"].split())
+    icons = emojis or {}
+    characters = " ".join(
+        icons.get("character:" + name, f"[{name}]")
+        for name in match.item.get("classes", [])
+    )
     return (
         f"**{discord.utils.escape_markdown(match.label)}** · "
-        f"+{match.item['health_bonus']} ❤️ to each teammate\n"
+        f"+{match.item['health_bonus']} ❤️ to each teammate"
+        f"{(' · ' + characters) if characters else ''}\n"
         f"{discord.utils.escape_markdown(description)}"
     )
 
@@ -744,9 +750,11 @@ class ResultsView(MessagePagesView):
             else "result"
         )
         self.select = discord.ui.Select(
-            placeholder=f"Select an {noun}"
-            if noun in ("organ", "encounter", "infuser")
-            else f"Select a {noun}",
+            placeholder=(
+                f"Select an {noun}"
+                if noun in ("organ", "encounter", "infuser")
+                else f"Select a {noun}"
+            ),
             row=0,
         )
         self.select.callback = self.pick
@@ -811,7 +819,10 @@ class ResultsView(MessagePagesView):
         await self.clear_leading_messages()
         if match.kind == "organ":
             await interaction.edit_original_response(
-                content=result_line(match), embeds=[], attachments=[], view=None
+                content=result_line(match, self.emojis),
+                embeds=[],
+                attachments=[],
+                view=None,
             )
             self.stop()
             return
@@ -884,7 +895,7 @@ async def lookup_response(catalog, query, owner, send, level=None, emojis=None):
         return
     if exact and len(matches) == 1:
         if matches[0].kind == "organ":
-            await send(content=result_line(matches[0]))
+            await send(content=result_line(matches[0], emojis))
             return
         if matches[0].kind == "monster":
             try:

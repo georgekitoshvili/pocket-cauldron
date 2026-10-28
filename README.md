@@ -36,7 +36,7 @@ A Discord bot for FLASK cards, infusers, monster fights, special encounters and 
 | `!flask party FB1.…` | Show a shared party. |
 | `!flask explain FB1.…` | Explain a party's flasks, organs, infusers, recognized interactions and cautions. JSON attachments also work. |
 
-`!flask organs` lists organ effects. Use `!flask rogue organs` (or any class) to list every organ that character can receive. Use `!flask organ <name>` for its effect and team health bonus.
+`!flask organs` lists organ effects, team health bonuses and compatible homunculi as emojis. Use `!flask rogue organs` (or any class) to list every organ that character can receive. Individual organ searches show the same details.
 
 Slash commands are also available under `/flask`.
 Search individual drone types with `!flask artificer d-drone`, `s-drone`, `h-drone` or `r-drone`. These match descriptions mentioning that type; `!flask artificer drone` includes general drone effects too.

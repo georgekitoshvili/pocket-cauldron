@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+import json
 import logging
 import re
 from io import BytesIO
@@ -12,6 +13,24 @@ from PIL import Image
 
 LOG = logging.getLogger("flask_emojis")
 OWNED_NAME = re.compile(r"^flask_(\d+)_([a-f0-9]{10})$")
+
+
+def character_entries(catalog):
+    path = catalog.root / "data/build-catalog.json"
+    if not path.is_file():
+        return []
+    classes = {
+        name
+        for organ in getattr(catalog, "organs", {}).values()
+        for name in organ.get("classes", [])
+    }
+    return [
+        {"id": int(ident), "name": entry["name"], "thumbnail": entry["image"]}
+        for ident, entry in json.loads(path.read_text("utf8")).items()
+        if entry.get("category") == "Character"
+        and entry.get("name") in classes
+        and entry.get("image")
+    ]
 
 
 def emoji_name(catalog, card):
@@ -102,18 +121,25 @@ class CardEmojis:
                     sum(card["id"] in self.values for card, _ in desired),
                     len(desired),
                 )
-                artwork = [
-                    ("element", element["name"], element)
-                    for element in element_entries(catalog)
-                ] + [
-                    (
-                        "organ",
-                        str(organ["id"]),
-                        {"id": organ["id"], "thumbnail": organ["image"]},
-                    )
-                    for organ in getattr(catalog, "organs", {}).values()
-                    if organ.get("image")
-                ]
+                artwork = (
+                    [
+                        ("element", element["name"], element)
+                        for element in element_entries(catalog)
+                    ]
+                    + [
+                        ("character", character["name"], character)
+                        for character in character_entries(catalog)
+                    ]
+                    + [
+                        (
+                            "organ",
+                            str(organ["id"]),
+                            {"id": organ["id"], "thumbnail": organ["image"]},
+                        )
+                        for organ in getattr(catalog, "organs", {}).values()
+                        if organ.get("image")
+                    ]
+                )
                 for kind, key, entry in artwork:
                     name = (
                         await asyncio.to_thread(emoji_name, catalog, entry)
@@ -132,7 +158,7 @@ class CardEmojis:
                         names[name] = emoji
                         count += 1
                     self.values[kind + ":" + key] = str(emoji)
-                for kind in ("element", "organ"):
+                for kind in ("element", "character", "organ"):
                     LOG.info(
                         "%s emoji sync complete: %d.",
                         kind.title(),
