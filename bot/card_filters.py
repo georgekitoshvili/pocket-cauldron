@@ -45,6 +45,7 @@ KEYWORD_ALIASES = {
     "Damage": ("damage", "strike", "strikes"),
     "Shield": ("shield", "shields"),
     "Health": ("health", "healing", "heal"),
+    "Lifesteal": ("lifesteal", "life steal"),
     "Lock": ("lock", "locked"),
     "Eternal": ("eternal", "ethernal"),
     "Flourish": ("flourish", "regen", "regenerate", "regeneration"),
@@ -72,6 +73,7 @@ KEYWORD_PATTERNS = {
     "Exhaust": r"\bexhaust(?:ed|s|ing)?\b",
     "Armor": r"\barmou?r\b",
     "Shield": r"\bshields?\b",
+    "Lifesteal": r"\blife[ -]?steal\b",
     "Lock": r"\b(?:un)?lock(?:ed|s|ing)?\b",
 }
 
