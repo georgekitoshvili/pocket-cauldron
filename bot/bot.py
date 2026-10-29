@@ -84,7 +84,7 @@ def help_text(topic=""):
             "attached to its flask; base effects and infuser effects are shown separately."
         ),
         "organ": (
-            "**Organs**\n`!flask organs` lists all organs with effects.\n`!flask rogue organs` lists every organ Rogue can receive, including unrestricted organs.\n"
+            "**Organs**\n`!flask organs` lists all organs; select a character to filter them.\n`!flask rogue organs` lists every organ Rogue can receive, including unrestricted organs.\n"
             "`!flask organ Sentinel` shows its effect and team health bonus."
         ),
         "filter": (
@@ -174,8 +174,8 @@ def result_line(match, emojis=None):
     )
 
 
-async def list_response(catalog, kind, owner, send, emojis=None, character=None):
-    matches = sorted(
+def list_matches(catalog, kind, character=None):
+    return sorted(
         (
             match
             for match in catalog.matches
@@ -192,6 +192,10 @@ async def list_response(catalog, kind, owner, send, emojis=None, character=None)
             match.item["id"],
         ),
     )
+
+
+async def list_response(catalog, kind, owner, send, emojis=None, character=None):
+    matches = list_matches(catalog, kind, character)
     title = {
         "card": "flasks",
         "monster": "monster fights",
@@ -203,7 +207,14 @@ async def list_response(catalog, kind, owner, send, emojis=None, character=None)
     if not matches:
         await send(content=f"No {title} are available in the current library.")
         return
-    view = ResultsView(catalog, matches, owner, list_title=title, emojis=emojis)
+    view = ResultsView(
+        catalog,
+        matches,
+        owner,
+        list_title=title,
+        emojis=emojis,
+        organ_character=character if kind == "organ" else None,
+    )
     await view.send(send)
 
 
@@ -695,7 +706,14 @@ class DetailView(OwnedView):
 
 class ResultsView(MessagePagesView):
     def __init__(
-        self, catalog, matches, owner, level=None, list_title=None, emojis=None
+        self,
+        catalog,
+        matches,
+        owner,
+        level=None,
+        list_title=None,
+        emojis=None,
+        organ_character=None,
     ):
         super().__init__(owner)
         self.catalog = catalog
@@ -708,6 +726,7 @@ class ResultsView(MessagePagesView):
         self.index = 0
         self.leading_messages = []
         self.organ_list = bool(list_title) and all(m.kind == "organ" for m in matches)
+        self.organ_character = organ_character
         self.result_pages = []
         self.message_pages = []
         page, chunks, lines = [], [], []
@@ -751,9 +770,13 @@ class ResultsView(MessagePagesView):
         )
         self.select = discord.ui.Select(
             placeholder=(
-                f"Select an {noun}"
-                if noun in ("organ", "encounter", "infuser")
-                else f"Select a {noun}"
+                "Select a character"
+                if self.organ_list
+                else (
+                    f"Select an {noun}"
+                    if noun in ("encounter", "infuser")
+                    else f"Select a {noun}"
+                )
             ),
             row=0,
         )
@@ -787,10 +810,26 @@ class ResultsView(MessagePagesView):
             self.counter.label = f"{self.index + 1}/{len(self.result_pages)}"
             self.previous.disabled = self.index == 0
             self.next.disabled = self.index == len(self.result_pages) - 1
-        self.select.options = [
-            discord.SelectOption(label=m.label[:100], value=m.key)
-            for m in self.result_pages[self.index]
-        ]
+        if self.organ_list:
+            self.select.options = [
+                discord.SelectOption(
+                    label="All characters",
+                    value="all",
+                    default=self.organ_character is None,
+                )
+            ] + [
+                discord.SelectOption(
+                    label=name,
+                    value=name,
+                    default=name == self.organ_character,
+                )
+                for name in organ_classes(self.catalog)
+            ]
+        else:
+            self.select.options = [
+                discord.SelectOption(label=m.label[:100], value=m.key)
+                for m in self.result_pages[self.index]
+            ]
 
     async def backwards(self, interaction):
         self.index = max(0, self.index - 1)
@@ -814,18 +853,25 @@ class ResultsView(MessagePagesView):
             )
 
     async def pick(self, interaction):
-        match = self.catalog.by_key[self.select.values[0]]
         await interaction.response.defer()
-        await self.clear_leading_messages()
-        if match.kind == "organ":
-            await interaction.edit_original_response(
-                content=result_line(match, self.emojis),
-                embeds=[],
-                attachments=[],
-                view=None,
+        if self.organ_list:
+            character = self.select.values[0]
+            character = None if character == "all" else character
+            title = f"{character} organs" if character else "organs"
+            view = ResultsView(
+                self.catalog,
+                list_matches(self.catalog, "organ", character),
+                self.owner,
+                list_title=title,
+                emojis=self.emojis,
+                organ_character=character,
             )
+            await self.clear_leading_messages()
+            await view.replace_messages(interaction)
             self.stop()
             return
+        match = self.catalog.by_key[self.select.values[0]]
+        await self.clear_leading_messages()
         if match.kind == "monster":
             try:
                 view = AdviceView(
