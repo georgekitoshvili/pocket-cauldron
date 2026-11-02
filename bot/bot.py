@@ -740,7 +740,7 @@ class ResultsView(MessagePagesView):
                 biome = match.item["location"]
             if biome is not None and biome != previous_biome:
                 heading = f"Biome {biome}" if isinstance(biome, int) else biome
-                line = f"\n**{heading}**\n{line}"
+                line = f"\n## {heading}\n\n{line}"
                 previous_biome = biome
             if lines and size + len(line) + 1 > 1700:
                 chunks.append("\n".join(lines))

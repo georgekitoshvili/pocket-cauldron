@@ -271,7 +271,7 @@ def card_pages(catalog, selection, emojis, level=None):
                 for source in card['obtain_sources'] if source['biome'] == biome
             })
             row += " · " + "; ".join(escape_markdown(source) for source in sources)
-        group_heading = f"**{group}**\n" if group else ""
+        group_heading = f"\n## {group}\n\n" if group else ""
         if group != previous_group:
             row = group_heading + row
         if len(row) + len(heading) > 1940:
@@ -284,8 +284,6 @@ def card_pages(catalog, selection, emojis, level=None):
         ):
             pages.append(heading + "\n".join(rows))
             rows = []
-            if group == previous_group:
-                row = group_heading + row
         rows.append(row)
         previous_group = group
     pages.append(heading + "\n".join(rows))
