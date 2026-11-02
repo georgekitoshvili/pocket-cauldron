@@ -10,11 +10,12 @@ import threading
 import tkinter as tk
 from dataclasses import dataclass
 from pathlib import Path
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 
 from build_protocol import decode_code, encode_code, validate_build
 from export_build import SavedRun, export_bytes, export_saved_runs
 from library_client import LibraryClient
+from personal_records import personal_records, records_html, records_text
 
 ROOT = Path(__file__).resolve().parent
 REFS = {}
@@ -92,8 +93,8 @@ class ShareApp:
     def __init__(self, root, snapshot=None):
         self.root = root
         root.title("FLASK - Share Build")
-        root.geometry("680x520")
-        root.minsize(680, 520)
+        root.geometry("900x720")
+        root.minsize(780, 640)
         root.configure(bg="#191622")
         style = ttk.Style()
         style.theme_use("clam")
@@ -104,10 +105,19 @@ class ShareApp:
         style.configure(
             "Title.TLabel", font=("Segoe UI", 22, "bold"), foreground="#ebc890"
         )
-        style.configure("TButton", font=("Segoe UI", 12), padding=9)
+        style.configure("TButton", font=("Segoe UI", 12), padding=9, background="#30283e", foreground="#eee8df")
+        style.map("TButton", background=[("active", "#493c5d")], foreground=[("disabled", "#8b8299")])
         style.configure("Copy.TButton", font=("Segoe UI", 15, "bold"), padding=13)
-        frame = ttk.Frame(root, padding=24)
-        frame.pack(fill="both", expand=True)
+        style.configure("TNotebook", background="#191622", borderwidth=0)
+        style.configure("TNotebook.Tab", padding=(22, 12), font=("Segoe UI", 11, "bold"), background="#211c2c", foreground="#bdb5cb")
+        style.map("TNotebook.Tab", background=[("selected", "#30283e")], foreground=[("selected", "#ebc890")])
+        style.configure("Record.Treeview", background="#211c2c", fieldbackground="#211c2c", foreground="#eee8df", font=("Segoe UI", 10), rowheight=32, borderwidth=0)
+        style.configure("Record.Treeview.Heading", font=("Segoe UI", 10, "bold"), background="#30283e", foreground="#ebc890")
+        style.map("Record.Treeview", background=[("selected", "#493c5d")], foreground=[("selected", "#ffffff")])
+        self.notebook = ttk.Notebook(root)
+        self.notebook.pack(fill="both", expand=True, padx=12, pady=12)
+        frame = ttk.Frame(self.notebook, padding=24)
+        self.notebook.add(frame, text="Share Build")
         ttk.Label(frame, text="Share your FLASK build", style="Title.TLabel").pack(
             anchor="w"
         )
@@ -143,6 +153,8 @@ class ShareApp:
         ).pack(anchor="w", pady=(12, 0))
         self.loading = False
         self.results = queue.Queue()
+        self.create_records_tab()
+        self.refresh_record_saves()
         if snapshot:
             use_snapshot(snapshot)
             self.refresh()
@@ -223,6 +235,156 @@ class ShareApp:
                 "Save a run in FLASK, then click Refresh library & run history."
             )
             self.status.set("")
+        self.refresh_record_saves()
+
+    def create_records_tab(self):
+        frame = ttk.Frame(self.notebook, padding=22)
+        self.notebook.add(frame, text="Personal Records")
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(5, weight=1)
+        ttk.Label(frame, text="Your personal records", style="Title.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(frame, text="Choose a save to see its best recorded moments.").grid(row=1, column=0, sticky="w", pady=(5, 14))
+        picker = ttk.Frame(frame)
+        picker.grid(row=2, column=0, sticky="ew")
+        self.record_paths = []
+        self.extra_record_paths = []
+        self.record_selection = ttk.Combobox(picker, state="readonly", font=("Segoe UI", 10))
+        self.record_selection.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        self.record_selection.bind("<<ComboboxSelected>>", self.show_records)
+        ttk.Button(picker, text="Choose file…", command=self.choose_record_file).pack(side="right")
+        self.record_coverage = tk.StringVar(value="Choose a FLASK save file.")
+        ttk.Label(frame, textvariable=self.record_coverage, wraplength=700, font=("Segoe UI", 9)).grid(row=3, column=0, sticky="w", pady=(10, 12))
+        highlights = ttk.Frame(frame)
+        highlights.grid(row=4, column=0, sticky="ew", pady=(0, 14))
+        self.record_highlights = {}
+        for column, (metric, label) in enumerate((("highestDamage", "LARGEST HIT"), ("highestShield", "SHIELD GAIN"), ("highestHeal", "LARGEST HEAL"))):
+            highlights.columnconfigure(column, weight=1)
+            card = tk.Frame(highlights, bg="#30283e", padx=18, pady=12)
+            card.grid(row=0, column=column, sticky="ew", padx=(0 if column == 0 else 8, 0))
+            tk.Label(card, text=label, bg="#30283e", fg="#bdb5cb", font=("Segoe UI", 9)).pack(anchor="w")
+            value = tk.StringVar(value="—")
+            tk.Label(card, textvariable=value, bg="#30283e", fg="#ebc890", font=("Segoe UI", 23, "bold")).pack(anchor="w")
+            self.record_highlights[metric] = value
+        table_frame = ttk.Frame(frame)
+        table_frame.grid(row=5, column=0, sticky="nsew")
+        self.records_table = ttk.Treeview(table_frame, columns=("value", "run"), show="tree headings", style="Record.Treeview", selectmode="browse")
+        self.records_table.heading("#0", text="RECORD", anchor="w")
+        self.records_table.heading("value", text="BEST", anchor="e")
+        self.records_table.heading("run", text="SOURCE", anchor="w")
+        self.records_table.column("#0", width=370, minwidth=260)
+        self.records_table.column("value", width=110, minwidth=80, anchor="e", stretch=False)
+        self.records_table.column("run", width=150, minwidth=110, stretch=False)
+        self.records_table.tag_configure("section", foreground="#ebc890", background="#30283e", font=("Segoe UI", 10, "bold"))
+        scroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.records_table.yview)
+        self.records_table.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")
+        self.records_table.pack(side="left", fill="both", expand=True)
+        self.records_table.bind("<<TreeviewSelect>>", self.record_selected)
+        self.record_status = tk.StringVar(value="Status amounts are run totals, not peak stacks.")
+        ttk.Label(frame, textvariable=self.record_status, wraplength=700, font=("Segoe UI", 9)).grid(row=6, column=0, sticky="w", pady=8)
+        actions = ttk.Frame(frame)
+        actions.grid(row=7, column=0, sticky="ew")
+        self.copy_records_button = ttk.Button(actions, text="Copy Records", command=self.copy_records)
+        self.copy_records_button.pack(side="left")
+        self.save_records_button = ttk.Button(actions, text="Save Report…", command=self.save_records_report)
+        self.save_records_button.pack(side="left", padx=8)
+        ttk.Button(actions, text="Refresh saves", command=self.refresh_record_saves).pack(side="right")
+        self.record_report = None
+        self.record_rows = {}
+        self.set_record_actions(False)
+
+    def set_record_actions(self, enabled):
+        for button in (self.copy_records_button, self.save_records_button):
+            button.state(["!disabled" if enabled else "disabled"])
+
+    def refresh_record_saves(self):
+        index = self.record_selection.current()
+        previous = self.record_paths[index] if 0 <= index < len(self.record_paths) else None
+        paths = sorted(set(save_folder().rglob("SavedGame.rbs")) | set(self.extra_record_paths), key=lambda path: str(path))
+        self.record_paths = paths
+        labels = []
+        for path in paths:
+            try:
+                report = personal_records(read_save_bytes(path))
+                labels.append(f"{report.profile} · {report.history_count} saved runs · {path.parent.name}")
+            except (ValueError, KeyError, TypeError, OSError):
+                labels.append(f"Unreadable save · {path.parent.name}/{path.name}")
+        self.record_selection["values"] = labels
+        if paths:
+            selected = previous if previous in paths else preferred_save(paths)
+            self.record_selection.current(paths.index(selected))
+            self.show_records()
+        else:
+            self.record_selection.set("No save found — use Choose file…")
+            self.record_coverage.set("Choose a SavedGame.rbs file to view its records.")
+            self.record_report = None
+            self.set_record_actions(False)
+
+    def choose_record_file(self):
+        filename = filedialog.askopenfilename(parent=self.root, title="Choose a FLASK save", initialdir=str(save_folder()), filetypes=[("FLASK saves", "*.rbs *.bak"), ("All files", "*.*")])
+        if filename:
+            path = Path(filename)
+            if path not in self.extra_record_paths:
+                self.extra_record_paths.append(path)
+            self.refresh_record_saves()
+            self.record_selection.current(self.record_paths.index(path))
+            self.show_records()
+
+    def show_records(self, event=None):
+        self.records_table.delete(*self.records_table.get_children())
+        self.record_rows = {}
+        self.record_report = None
+        self.set_record_actions(False)
+        for value in self.record_highlights.values():
+            value.set("—")
+        try:
+            index = self.record_selection.current()
+            if not 0 <= index < len(self.record_paths):
+                raise ValueError("Choose a save file first.")
+            report = personal_records(read_save_bytes(self.record_paths[index]), REFS, NAMES)
+            self.record_report = report
+            self.record_coverage.set(report.coverage)
+            groups = {}
+            for row in report.records:
+                if row.group not in groups:
+                    groups[row.group] = self.records_table.insert("", "end", text=row.group, open=True, tags=("section",))
+                ident = self.records_table.insert(groups[row.group], "end", text=row.label, values=(f"{row.value:,}", row.run))
+                self.record_rows[ident] = row
+                if row.metric in self.record_highlights:
+                    self.record_highlights[row.metric].set(f"{row.value:,}")
+            self.record_status.set("Status amounts are run totals, not peak stacks. Select a record for its date.")
+            self.set_record_actions(True)
+            return report
+        except (ValueError, KeyError, TypeError, OSError) as exc:
+            self.record_coverage.set("Could not read records from this save.")
+            self.record_status.set(str(exc))
+            return None
+
+    def record_selected(self, event=None):
+        selected = self.records_table.selection()
+        row = self.record_rows.get(selected[0]) if selected else None
+        if row:
+            self.record_status.set(f"{row.label}: {row.value:,} · {row.run} · {row.completed}")
+
+    def copy_records(self):
+        report = self.show_records()
+        if report:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(records_text(report))
+            self.root.update()
+            self.record_status.set("Records copied. Paste them into a message or document.")
+
+    def save_records_report(self):
+        report = self.show_records()
+        if not report:
+            return
+        filename = filedialog.asksaveasfilename(parent=self.root, title="Save personal records report", initialfile="FLASK Personal Records.html", defaultextension=".html", filetypes=[("HTML report", "*.html")])
+        if filename:
+            try:
+                Path(filename).write_text(records_html(report), encoding="utf8")
+                self.record_status.set("Report saved. Open it in your browser to view or print it.")
+            except OSError as exc:
+                messagebox.showerror("Could not save report", str(exc), parent=self.root)
 
     def selected_build(self, reread=False):
         index = self.combo.current()
@@ -360,6 +522,23 @@ def self_test(output):
         result["historical_teams"] = sum(
             team.run.key[0] == "history" for team in app.saves
         )
+    assert len(app.notebook.tabs()) == 2
+    result["tabs"] = 2
+    if app.record_paths:
+        app.notebook.select(1)
+        selected_path = app.record_paths[app.record_selection.current()]
+        before = hashlib.sha256(selected_path.read_bytes()).digest()
+        report = app.show_records()
+        assert report is not None and app.records_table.get_children()
+        copied_records = []
+        window.clipboard_append = lambda text: copied_records.append(text)
+        app.copy_records()
+        assert copied_records == [records_text(report)]
+        assert hashlib.sha256(selected_path.read_bytes()).digest() == before
+        preview = Path(output).with_suffix(".html")
+        preview.write_text(records_html(report), encoding="utf8")
+        result.update(records_tab_verified=True, records_copy_verified=True,
+                      record_count=len(report.records), records_save_unchanged=True)
     window.destroy()
     Path(output).write_text(json.dumps(result, indent=2), encoding="utf8")
 

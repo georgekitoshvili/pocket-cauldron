@@ -56,6 +56,8 @@ Search with keywords directly: `!flask rogue kunai`, `!flask ranger health`, `!f
 
 The bot shows your characters, flasks, levels, infusers, snacks, mutations and element tokens. The exporter includes the current saved team and up to 10 completed runs retained in FLASK’s match history. It reads your save without changing it. Players do not need Python or the bot's files. Internet is needed on the first run.
 
+The exporter's **Personal Records** tab lets you select a profile or browse to a `SavedGame.rbs` file. It shows the best values from that save's retained run history and current run, with the source run for each record. **Copy Records** copies a text list; **Save Report** creates a styled HTML report you can open or print. Status amounts are run totals, not peak stacks. Older runs are not retained, so these may not be lifetime records. Saves stay on your computer.
+
 ## Run your own bot
 
 1. Install **[Python 3.11 or newer](https://www.python.org/downloads/)**.
