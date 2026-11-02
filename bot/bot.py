@@ -186,7 +186,7 @@ def list_matches(catalog, kind, character=None):
             (
                 -match.item["health_bonus"]
                 if kind == "organ"
-                else match.item.get("biome", 0)
+                else match.item.get("biome", 6 if kind == "monster" else 0)
             ),
             match.label.casefold(),
             match.item["id"],
@@ -736,8 +736,11 @@ class ResultsView(MessagePagesView):
         for match in matches:
             line = result_line(match, self.emojis)
             biome = match.item.get("biome")
+            if match.kind == "monster" and match.item.get("location"):
+                biome = match.item["location"]
             if biome is not None and biome != previous_biome:
-                line = f"\n**Biome {biome}**\n{line}"
+                heading = f"Biome {biome}" if isinstance(biome, int) else biome
+                line = f"\n**{heading}**\n{line}"
                 previous_biome = biome
             if lines and size + len(line) + 1 > 1700:
                 chunks.append("\n".join(lines))

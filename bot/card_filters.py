@@ -137,6 +137,7 @@ class CardFilter:
 def filter_names(catalog):
     classes = sorted(
         {card["character"] for card in catalog.cards.values() if card.get("character")}
+        | {"Neutral"}
     )
     elements = sorted(
         {element for card in catalog.cards.values() for element in card["elements"]}
@@ -145,6 +146,7 @@ def filter_names(catalog):
 
 
 def parse_filter(catalog, query):
+    query = re.sub(r"\bflasks?\b", "", query, flags=re.I).strip()
     query = re.sub(r"\b(?:artifacter|artrifacter)\b", "Artificer", query, flags=re.I)
     starting = re.search(r"\bstarting\s+(?:level\s+)?(\d+)\b", query, re.I)
     if starting:
@@ -203,6 +205,7 @@ def filtered_cards(catalog, selection, level=None):
             for card in catalog.cards.values()
             if (
                 selection.character is None
+                or (selection.character == "Neutral" and not card.get("character"))
                 or card.get("character") == selection.character
             )
             and (selection.element is None or selection.element in card["elements"])
