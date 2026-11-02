@@ -236,7 +236,20 @@ def card_pages(catalog, selection, emojis, level=None):
     pages = []
     rows = []
     row_limit = None if selection.keyword not in (None, "Damage", "Shield") else 30
-    for card in cards:
+    entries = [(None, card) for card in cards]
+    if selection.character == "Neutral":
+        entries = [
+            (f"Biome {biome}", card)
+            for biome in range(1, 6)
+            for card in cards
+            if any(source['biome'] == biome for source in card.get('obtain_sources', []))
+        ]
+        entries.extend(
+            ("No direct reward or merchant source", card)
+            for card in cards if not card.get('obtain_sources')
+        )
+    previous_group = None
+    for group, card in entries:
         shown_level = card["available_level"] if level is None else level
         description = escape_markdown(
             " ".join(catalog.description(card, shown_level).split())
@@ -251,6 +264,16 @@ def card_pages(catalog, selection, emojis, level=None):
             f"{emojis.get(card['id'], '🧪')} **{escape_markdown(card['name'])}**"
             f" (Lv {shown_level}{character}) — {description}"
         )
+        if group and group.startswith('Biome '):
+            biome = int(group.split()[-1])
+            sources = sorted({
+                f"{source['name']} (Lv {source['level']})"
+                for source in card['obtain_sources'] if source['biome'] == biome
+            })
+            row += " · " + "; ".join(escape_markdown(source) for source in sources)
+        group_heading = f"**{group}**\n" if group else ""
+        if group != previous_group:
+            row = group_heading + row
         if len(row) + len(heading) > 1940:
             raise ValueError(
                 f"{card['name']} is too long for this list. Use !flask {card['name']}."
@@ -261,7 +284,10 @@ def card_pages(catalog, selection, emojis, level=None):
         ):
             pages.append(heading + "\n".join(rows))
             rows = []
+            if group == previous_group:
+                row = group_heading + row
         rows.append(row)
+        previous_group = group
     pages.append(heading + "\n".join(rows))
     note = "Base levels" if level is None else f"Level {level}"
     return [
