@@ -1,8 +1,6 @@
 """Personal bests recoverable from one save's retained runs. Data-only and read-only."""
 
-import sqlite3
-from contextlib import closing
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from html import escape
 
 from export_build import read_save
@@ -112,40 +110,10 @@ def personal_records(data, refs=None, names=None):
     includes_current = bool(meta.get("inRun")) and isinstance(player, dict)
     if includes_current:
         consume(player, "Current run", "In progress", current=True)
-    add("Saved peak", "peakLadderStars", "Peak ladder stars", meta.get("peakLadderStars"), "Profile", "Lifetime saved peak")
-    streak = 0
-    for entry in history:
-        if not entry.get("ranked"):
-            continue
-        streak = streak + 1 if entry.get("gameEndState") == 1 else 0
-        add("Saved peak", "bestRankedStreak", "Best ranked win streak", streak, "Run history", "Consecutive ranked run wins")
-    add("Saved peak", "bestRankedStreak", "Best ranked win streak", meta.get("rankedWinStreak"), "Profile", "Current ranked streak")
-    order = [*METRICS, "Buffs gained · run totals", "Debuffs applied · run totals", "Saved peak"]
+    order = [*METRICS, "Buffs gained · run totals", "Debuffs applied · run totals"]
     metric_order = {key: index for index, key in enumerate(key for group in METRICS.values() for key in group)}
     rows = sorted(best.values(), key=lambda row: (order.index(row.group), metric_order.get(row.metric, 100), row.label.casefold()))
     return PersonalRecords(clean_text(meta.get("companyName"), "Unnamed profile"), clean_text(root.get("gameVersion"), "Unknown"), len(history), includes_current, tuple(rows))
-
-
-def remember_ranked_streak(report, save_path, database):
-    observed = next((row for row in report.records if row.metric == "bestRankedStreak"), None)
-    if observed is None:
-        return report
-    database.parent.mkdir(parents=True, exist_ok=True)
-    key = str(save_path.resolve())
-    with closing(sqlite3.connect(database)) as connection, connection:
-        connection.execute(
-            "CREATE TABLE IF NOT EXISTS ranked_peaks (save_path TEXT PRIMARY KEY, wins INTEGER NOT NULL)"
-        )
-        connection.execute(
-            "INSERT INTO ranked_peaks VALUES (?, ?) ON CONFLICT(save_path) "
-            "DO UPDATE SET wins = max(wins, excluded.wins)",
-            (key, observed.value),
-        )
-        peak = connection.execute(
-            "SELECT wins FROM ranked_peaks WHERE save_path = ?", (key,)
-        ).fetchone()[0]
-    saved = replace(observed, value=peak, run="Saved locally", completed="Highest ranked streak observed by the exporter")
-    return replace(report, records=tuple(saved if row is observed else row for row in report.records))
 
 
 def records_text(report):
