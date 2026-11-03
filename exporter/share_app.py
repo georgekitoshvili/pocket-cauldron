@@ -5,6 +5,7 @@ import json
 import os
 import queue
 import re
+import sqlite3
 import sys
 import threading
 import tkinter as tk
@@ -14,8 +15,8 @@ from tkinter import filedialog, messagebox, ttk
 
 from build_protocol import decode_code, encode_code, validate_build
 from export_build import SavedRun, export_bytes, export_saved_runs
-from library_client import LibraryClient
-from personal_records import personal_records, records_html, records_text
+from library_client import LibraryClient, cache_directory
+from personal_records import personal_records, records_html, records_text, remember_ranked_streak
 
 ROOT = Path(__file__).resolve().parent
 REFS = {}
@@ -341,7 +342,13 @@ class ShareApp:
             index = self.record_selection.current()
             if not 0 <= index < len(self.record_paths):
                 raise ValueError("Choose a save file first.")
-            report = personal_records(read_save_bytes(self.record_paths[index]), REFS, NAMES)
+            path = self.record_paths[index]
+            report = personal_records(read_save_bytes(path), REFS, NAMES)
+            notice = "Status amounts are run totals. Select a record for details."
+            try:
+                report = remember_ranked_streak(report, path, cache_directory().parent / "ranked-peaks.sqlite3")
+            except (OSError, sqlite3.Error):
+                notice = "Could not save the streak locally. Showing the best visible in this save."
             self.record_report = report
             self.record_coverage.set(report.coverage)
             groups = {}
@@ -352,7 +359,7 @@ class ShareApp:
                 self.record_rows[ident] = row
                 if row.metric in self.record_highlights:
                     self.record_highlights[row.metric].set(f"{row.value:,}")
-            self.record_status.set("Status amounts are run totals, not peak stacks. Select a record for its date.")
+            self.record_status.set(notice)
             self.set_record_actions(True)
             return report
         except (ValueError, KeyError, TypeError, OSError) as exc:
