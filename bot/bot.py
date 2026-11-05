@@ -572,10 +572,16 @@ class ElementsView(OwnedView):
         tiers = self.catalog.element_tiers.get(name)
         if not tiers:
             return title + "\nTier descriptions are unavailable in this library."
-        return title + "\n\n" + "\n\n".join(
-            f"**Tier {label}**\n{description}"
-            for label, description in zip(("I", "II", "III"), tiers)
-        )
+        sections = []
+        for index, (label, description) in enumerate(zip(("I", "II", "III"), tiers)):
+            heading = f"**Tier {label}**"
+            if index == 2:
+                additional_effect = description.removeprefix(tiers[1] + "\n")
+                if additional_effect != description:
+                    heading += " *(adds to Tier II)*"
+                    description = additional_effect
+            sections.append(f"{heading}\n{description}")
+        return title + "\n\n" + "\n\n".join(sections)
 
     async def pick(self, interaction):
         name = self.select.values[0]
