@@ -24,7 +24,8 @@ A Discord bot for FLASK cards, infusers, monster fights, special encounters and 
 | `!flask artificer damage` / `!flask artificer armor` / `!flask artificer shield` | Filter a class by !flask effects. `artifacter` and `strike` also work as aliases. |
 | `!flask infuser Shielding` | Show an infuser and its effect. |
 | `!flask infusers` | List all infusers. |
-| `!flask elements` | Browse element emojis and select an element to see its flasks. |
+| `!flask elements` | Browse elements and select one to see all three tiers. |
+| `!flask element Void` | Show the effects for a specific element. |
 | `!flask organs` | List organ effects and team HP bonuses. |
 | `!flask organ Sentinel` | Show its effect and team health bonus. |
 | `!flask monster Burning Witch` | Show each monster's mutation, base HP and !flask effects, including changing forms and random !flask pools. |

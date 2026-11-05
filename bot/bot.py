@@ -27,7 +27,7 @@ from discord import app_commands
 from dotenv import load_dotenv
 from element_icons import with_elements
 from library_client import LibraryError
-from lookup import ROOT, Catalog, Match, parse_message
+from lookup import ROOT, Catalog, Match, normalize, parse_message
 from monster_cards import monster_pages
 from party_explanation import explain_pages
 
@@ -37,7 +37,7 @@ HELP = (
     "```text\n"
     "help        Help and examples.\n"
     "infusers    List infusers.\n"
-    "elements    Browse elements and their flasks.\n"
+    "elements    Browse element effects by tier.\n"
     "monsters    List monster fights.\n"
     "encounters  List encounters by biome.\n"
     "organs      List organ effects and team health.\n"
@@ -47,7 +47,7 @@ HELP = (
     "**Examples**\n"
     "`!flask Acidburn` — flask\n"
     "`!flask infuser Shielding` — infuser\n"
-    "`!flask void` — element\n"
+    "`!flask element Void` — element tiers\n"
     "`!flask Burning Witch` — monster fight\n"
     "`!flask Witch Cauldron` — encounter\n"
     "`!flask rogue organs` — compatible organs\n"
@@ -56,7 +56,7 @@ HELP = (
     "`!flask ranger health`, `!flask artificer drone`, `!flask artificer heat` or `!flask artificer frost`. "
     "Drone types: `!flask artificer d-drone`, `s-drone`, `h-drone` or `r-drone`. "
     "Try `!flask druid beetle`, `!flask druid spirits` or `!flask warrior taunt`. "
-    "A class or element alone also works. Use the dropdowns to change levels.\n\n"
+    "Use a class name or `!flask void` to list flasks. Use the dropdowns to change levels.\n\n"
     "**How to export a build:** Open FLASK Share Build, click Copy Build, "
     "then paste directly into Discord. That's it."
 )
@@ -220,8 +220,7 @@ async def list_response(catalog, kind, owner, send, emojis=None, character=None)
 
 async def info_response(catalog, query, owner, send, level=None, emojis=None):
     query = query.strip()
-    if re.sub(r"^info\s+", "", query, flags=re.I).lower() == "elements":
-        await elements_response(catalog, owner, send, emojis)
+    if await route_element_query(catalog, query, owner, send, emojis):
         return
     character = organ_character(catalog, query)
     if character:
@@ -535,7 +534,7 @@ async def filter_response(catalog, selection, emojis, owner, send, level=None):
 
 
 class ElementsView(OwnedView):
-    def __init__(self, catalog, owner, emojis=None):
+    def __init__(self, catalog, owner, emojis=None, selected=None):
         super().__init__(owner)
         self.catalog = catalog
         self.emojis = (
@@ -549,6 +548,7 @@ class ElementsView(OwnedView):
                     label=name,
                     value=name,
                     emoji=self.emojis.get("element:" + name),
+                    default=name == selected,
                 )
                 for name in self.names
             ],
@@ -564,36 +564,26 @@ class ElementsView(OwnedView):
         return (
             "**Elements**\n"
             + " · ".join(entries)
-            + "\nSelect an element to browse its flasks."
+            + "\nSelect an element to see its effects by tier."
+        )
+
+    def detail_content(self, name):
+        title = f"{self.emojis.get('element:' + name, '')} **{name}**".strip()
+        tiers = self.catalog.element_tiers.get(name)
+        if not tiers:
+            return title + "\nTier descriptions are unavailable in this library."
+        return title + "\n\n" + "\n\n".join(
+            f"**Tier {label}**\n{description}"
+            for label, description in zip(("I", "II", "III"), tiers)
         )
 
     async def pick(self, interaction):
-        await interaction.response.defer()
-        view = CardListView(
-            self.catalog,
-            CardFilter(element=self.select.values[0]),
-            self.emojis,
-            self.owner,
+        name = self.select.values[0]
+        for option in self.select.options:
+            option.default = option.value == name
+        await interaction.response.edit_message(
+            content=self.detail_content(name), view=self
         )
-        back = discord.ui.Button(label="Elements", row=3)
-
-        async def show_elements(interaction):
-            menu = ElementsView(self.catalog, self.owner, self.emojis)
-            if view.leading_messages:
-                await interaction.response.defer()
-                await view.clear_leading_messages()
-                await interaction.edit_original_response(
-                    content=menu.content(), view=menu
-                )
-                view.stop()
-                return
-            await interaction.response.edit_message(content=menu.content(), view=menu)
-            view.stop()
-
-        back.callback = show_elements
-        view.add_item(back)
-        await view.replace_messages(interaction)
-        self.stop()
 
 
 async def elements_response(catalog, owner, send, emojis=None):
@@ -603,6 +593,28 @@ async def elements_response(catalog, owner, send, emojis=None):
         return
     view = ElementsView(catalog, owner, emojis)
     await send(content=view.content(), view=view)
+
+
+async def route_element_query(catalog, query, owner, send, emojis):
+    query = re.sub(r"^info\s+", "", query, flags=re.I)
+    parts = query.split(maxsplit=1)
+    if not parts:
+        return False
+    command = parts[0].casefold()
+    if command in ("element", "elements") and len(parts) == 1:
+        await elements_response(catalog, owner, send, emojis)
+        return True
+    if command != "element":
+        return False
+    _, names = filter_names(catalog)
+    needle = normalize(parts[1])
+    name = next((name for name in names if normalize(name) == needle), None)
+    if name is None:
+        await send(content="Element not found. Use `!flask elements` to browse the list.")
+        return True
+    view = ElementsView(catalog, owner, emojis, selected=name)
+    await send(content=view.detail_content(name), view=view)
+    return True
 
 
 class DetailView(OwnedView):
@@ -916,8 +928,7 @@ class ResultsView(MessagePagesView):
 
 async def lookup_response(catalog, query, owner, send, level=None, emojis=None):
     query = query.strip()
-    if re.sub(r"^info\s+", "", query, flags=re.I).lower() == "elements":
-        await elements_response(catalog, owner, send, emojis)
+    if await route_element_query(catalog, query, owner, send, emojis):
         return
     character = organ_character(catalog, query)
     if character:
@@ -1410,7 +1421,7 @@ class FlaskBot(discord.Client):
                 )
 
             @parent.command(
-                name="elements", description="Browse elements and their flasks."
+                name="elements", description="Browse element effects by tier."
             )
             async def elements(interaction: discord.Interaction):
                 await elements_response(
