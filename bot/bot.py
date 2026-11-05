@@ -574,13 +574,9 @@ class ElementsView(OwnedView):
             return title + "\nTier descriptions are unavailable in this library."
         sections = []
         for index, (label, description) in enumerate(zip(("I", "II", "III"), tiers)):
-            heading = f"**Tier {label}**"
             if index == 2:
-                additional_effect = description.removeprefix(tiers[1] + "\n")
-                if additional_effect != description:
-                    heading += " *(adds to Tier II)*"
-                    description = additional_effect
-            sections.append(f"{heading}\n{description}")
+                description = description.removeprefix(tiers[1] + "\n")
+            sections.append(f"**Tier {label}**\n{description}")
         return title + "\n\n" + "\n\n".join(sections)
 
     async def pick(self, interaction):
@@ -610,7 +606,7 @@ async def route_element_query(catalog, query, owner, send, emojis):
     if command in ("element", "elements") and len(parts) == 1:
         await elements_response(catalog, owner, send, emojis)
         return True
-    if command != "element":
+    if command not in ("element", "elements"):
         return False
     _, names = filter_names(catalog)
     needle = normalize(parts[1])
