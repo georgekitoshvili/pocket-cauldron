@@ -27,7 +27,7 @@ def snack_matches(snack, selected):
     return selected in effects
 
 
-def item_pages(catalog, kind, emojis, selected="All"):
+def item_pages(catalog, kind, emojis, selected="All", biome=False):
     groups = []
     if kind == "snack":
         snacks = sorted(
@@ -38,10 +38,10 @@ def item_pages(catalog, kind, emojis, selected="All"):
             ),
             key=lambda snack: (snack["rarity"], snack["name"].casefold()),
         )
-        for biome, rarities in BIOME_RARITIES.items():
+        for biome_number, rarities in BIOME_RARITIES.items():
             groups.append(
                 (
-                    f"Biome {biome}",
+                    f"Biome {biome_number}",
                     [
                         snack
                         for snack in snacks
@@ -60,13 +60,15 @@ def item_pages(catalog, kind, emojis, selected="All"):
             (title + " · Biomes 1–3", groups[:3]),
             (title + " · Biomes 4–5 and rewards", groups[3:]),
         ]
+        if not biome:
+            sections = [(title, [("", snacks)])]
     else:
         infusers = sorted(
             catalog.infusers.values(),
             key=lambda item: (item.get("rarity", 0), item["name"].casefold()),
         )
         sections = []
-        for biome, chances in enumerate(INFUSER_CHANCES, 1):
+        for biome_number, chances in enumerate(INFUSER_CHANCES, 1):
             odds = " · ".join(
                 f"{INFUSER_RARITY_NAMES[rarity]} {chance}%"
                 for rarity, chance in enumerate(chances)
@@ -77,8 +79,8 @@ def item_pages(catalog, kind, emojis, selected="All"):
                 for item in infusers
                 if item.get("rarity", 0) < 3 and chances[item.get("rarity", 0)]
             ]
-            groups = [(f"Biome {biome} · {odds}", items)]
-            if biome == 5:
+            groups = [(f"Biome {biome_number} · {odds}", items)]
+            if biome_number == 5:
                 groups.append(
                     (
                         "Special rewards · Not in normal random rolls",
@@ -86,6 +88,8 @@ def item_pages(catalog, kind, emojis, selected="All"):
                     )
                 )
             sections.append(("**Infusers**", groups))
+        if not biome:
+            sections = [("**Infusers**", [("", infusers)])]
     pages = []
     for title, section_groups in sections:
         chunks = []
@@ -98,6 +102,8 @@ def item_pages(catalog, kind, emojis, selected="All"):
                     rarity = f" ({INFUSER_RARITY_NAMES[item.get('rarity', 0)]})"
                 elif item["normal"]:
                     rarity = f" ({RARITY_NAMES[item['rarity']]})"
+                else:
+                    rarity = " (Special reward)"
                 row = (
                     f"{icon} **{item['name']}**{rarity} — {item['description']}".strip()
                 )

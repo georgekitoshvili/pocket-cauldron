@@ -37,8 +37,8 @@ HELP = (
     "**Pocket Cauldron**\n"
     "```text\n"
     "help        Help and examples.\n"
-    "infusers    Browse infusers by biome and rarity.\n"
-    "snacks      Snack effects by biome and stat.\n"
+    "infusers    List infuser effects and rarity.\n"
+    "snacks      List snack effects and rarity.\n"
     "elements    Browse element effects by tier.\n"
     "monsters    List monster fights.\n"
     "encounters  List encounters by biome.\n"
@@ -49,7 +49,7 @@ HELP = (
     "**Examples**\n"
     "`!flask Acidburn` — flask\n"
     "`!flask infuser Shielding` — infuser\n"
-    "`!flask snacks` — snacks by biome\n"
+    "`!flask snacks biome` · `!flask infusers biome` — browse by biome\n"
     "`!flask snacks strength` — snacks by effect\n"
     "`!flask element Void` — element tiers\n"
     "`!flask Burning Witch` — monster fight\n"
@@ -399,10 +399,11 @@ class MessagePagesView(OwnedView):
 
 
 class ItemListView(MessagePagesView):
-    def __init__(self, catalog, kind, owner, emojis=None, selected="All"):
+    def __init__(self, catalog, kind, owner, emojis=None, selected="All", biome=False):
         super().__init__(owner)
         self.catalog = catalog
         self.kind = kind
+        self.biome = biome
         self.emojis = (
             emojis if emojis is not None else getattr(catalog, "emoji_values", {})
         )
@@ -431,7 +432,7 @@ class ItemListView(MessagePagesView):
 
     def rebuild(self):
         self.message_pages = item_pages(
-            self.catalog, self.kind, self.emojis, self.selected
+            self.catalog, self.kind, self.emojis, self.selected, self.biome
         )
         self.counter.label = f"{self.index + 1} / {len(self.message_pages)}"
         self.previous.disabled = self.next.disabled = len(self.message_pages) == 1
@@ -459,6 +460,11 @@ class ItemListView(MessagePagesView):
 
 async def route_item_list(catalog, query, owner, send, emojis=None):
     query = re.sub(r"^info\s+", "", query, flags=re.I).strip().casefold()
+    tokens = query.split()
+    biome = "biome" in tokens[1:]
+    query = " ".join(
+        token for index, token in enumerate(tokens) if index == 0 or token != "biome"
+    )
     parts = query.split(maxsplit=1)
     selected = "All"
     if parts and parts[0] in ("snacks", "snack"):
@@ -481,7 +487,7 @@ async def route_item_list(catalog, query, owner, send, emojis=None):
         kind = "infuser"
     else:
         return False
-    view = ItemListView(catalog, kind, owner, emojis, selected)
+    view = ItemListView(catalog, kind, owner, emojis, selected, biome)
     await view.send(send)
     return True
 
@@ -1522,24 +1528,24 @@ class FlaskBot(discord.Client):
                     self.card_emojis.values,
                 )
 
-            @parent.command(name="infusers", description="Browse infusers by biome and rarity.")
-            async def infusers(interaction: discord.Interaction):
+            @parent.command(
+                name="infusers", description="List infuser effects and rarity."
+            )
+            async def infusers(interaction: discord.Interaction, biome: bool = False):
                 await interaction.response.defer(thinking=True)
                 await info_response(
                     self.catalog,
-                    "infusers",
+                    "infusers biome" if biome else "infusers",
                     interaction.user.id,
                     interaction.followup.send,
                 )
 
-            @parent.command(
-                name="snacks", description="List snacks by biome and effect."
-            )
-            async def snacks(interaction: discord.Interaction):
+            @parent.command(name="snacks", description="List snack effects and rarity.")
+            async def snacks(interaction: discord.Interaction, biome: bool = False):
                 await interaction.response.defer(thinking=True)
                 await info_response(
                     self.catalog,
-                    "snacks",
+                    "snacks biome" if biome else "snacks",
                     interaction.user.id,
                     interaction.followup.send,
                     emojis=self.card_emojis.values,
