@@ -54,6 +54,11 @@ def item_pages(catalog, kind, emojis, selected="All"):
             )
         )
         title = "**Snacks**" + (f" · {selected}" if selected != "All" else "")
+        sections = [
+            (title + " · Biomes 1–2", groups[:2]),
+            (title + " · Biomes 3–4", groups[2:4]),
+            (title + " · Biome 5 and rewards", groups[4:]),
+        ]
     else:
         groups = [
             (
@@ -64,25 +69,30 @@ def item_pages(catalog, kind, emojis, selected="All"):
             )
         ]
         title = f"**All {len(catalog.infusers)} infusers**"
-    chunks = []
-    body = title + "\n"
-    for heading, items in groups:
-        for index, item in enumerate(items):
-            icon = emojis.get(f"{kind}:{item['id']}", "")
-            rarity = (
-                f" ({RARITY_NAMES[item['rarity']]})"
-                if kind == "snack" and item["normal"]
-                else ""
-            )
-            row = f"{icon} **{item['name']}**{rarity} — {item['description']}".strip()
-            if index == 0 and heading:
-                row = f"\n## {heading}\n" + row
-            if len(body) + len(row) + 1 > 1850:
-                chunks.append(body.rstrip())
-                body = ""
-            body += row + "\n"
-    if body.strip() == title:
-        body += "No matching snacks."
-    if body.strip():
+        sections = [(title, groups)]
+    pages = []
+    for title, section_groups in sections:
+        chunks = []
+        body = title + "\n"
+        for heading, items in section_groups:
+            for index, item in enumerate(items):
+                icon = emojis.get(f"{kind}:{item['id']}", "")
+                rarity = (
+                    f" ({RARITY_NAMES[item['rarity']]})"
+                    if kind == "snack" and item["normal"]
+                    else ""
+                )
+                row = (
+                    f"{icon} **{item['name']}**{rarity} — {item['description']}".strip()
+                )
+                if index == 0 and heading:
+                    row = f"\n## {heading}\n" + row
+                if len(body) + len(row) + 1 > 1850:
+                    chunks.append(body.rstrip())
+                    body = ""
+                body += row + "\n"
+        if body.strip() == title:
+            body += "No matching snacks on this page."
         chunks.append(body.rstrip())
-    return [chunks[index : index + 3] for index in range(0, len(chunks), 3)]
+        pages.extend(chunks[index : index + 3] for index in range(0, len(chunks), 3))
+    return pages

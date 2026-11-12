@@ -50,6 +50,7 @@ HELP = (
     "`!flask Acidburn` — flask\n"
     "`!flask infuser Shielding` — infuser\n"
     "`!flask snacks` — snacks by biome\n"
+    "`!flask snacks strength` — snacks by effect\n"
     "`!flask element Void` — element tiers\n"
     "`!flask Burning Witch` — monster fight\n"
     "`!flask Witch Cauldron` — encounter\n"
@@ -398,14 +399,14 @@ class MessagePagesView(OwnedView):
 
 
 class ItemListView(MessagePagesView):
-    def __init__(self, catalog, kind, owner, emojis=None):
+    def __init__(self, catalog, kind, owner, emojis=None, selected="All"):
         super().__init__(owner)
         self.catalog = catalog
         self.kind = kind
         self.emojis = (
             emojis if emojis is not None else getattr(catalog, "emoji_values", {})
         )
-        self.selected = "All"
+        self.selected = selected
         self.index = 0
         self.leading_messages = []
         self.previous = discord.ui.Button(label="Previous", row=0)
@@ -420,7 +421,7 @@ class ItemListView(MessagePagesView):
                 placeholder="Select a snack effect",
                 row=1,
                 options=[
-                    discord.SelectOption(label=label, default=label == "All")
+                    discord.SelectOption(label=label, default=label == selected)
                     for label in SNACK_FILTERS
                 ],
             )
@@ -458,13 +459,29 @@ class ItemListView(MessagePagesView):
 
 async def route_item_list(catalog, query, owner, send, emojis=None):
     query = re.sub(r"^info\s+", "", query, flags=re.I).strip().casefold()
-    if query in ("snacks", "snack"):
+    parts = query.split(maxsplit=1)
+    selected = "All"
+    if parts and parts[0] in ("snacks", "snack"):
         kind = "snack"
+        if len(parts) == 2:
+            filters = {label.casefold(): label for label in SNACK_FILTERS}
+            filters.update(
+                health="Health only",
+                hp="Health only",
+                rest="Other effects",
+                other="Other effects",
+            )
+            selected = filters.get(parts[1])
+            if selected is None:
+                await send(
+                    content="Choose Strength, Armor, Health, Struggle, Flourish, Taunt, or Other effects."
+                )
+                return True
     elif query in ("infuser", "infusers"):
         kind = "infuser"
     else:
         return False
-    view = ItemListView(catalog, kind, owner, emojis)
+    view = ItemListView(catalog, kind, owner, emojis, selected)
     await view.send(send)
     return True
 

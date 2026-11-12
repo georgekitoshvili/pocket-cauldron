@@ -26,6 +26,7 @@ A Discord bot for FLASK cards, infusers, monster fights, special encounters and 
 | `!flask infusers` | List all infusers. |
 | `!flask elements` | Browse elements and select one to see all three tiers. |
 | `!flask snacks` | Browse snack effects by biome and filter by stat. |
+| `!flask snacks strength` | Filter snacks directly by effect. |
 | `!flask element Void` or `!flask elements Void` | Show the effects for a specific element. |
 | `!flask organs` | List organ effects and team HP bonuses. |
 | `!flask organ Sentinel` | Show its effect and team health bonus. |
