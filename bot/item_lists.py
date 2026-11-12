@@ -10,7 +10,13 @@ SNACK_FILTERS = (
     "Taunt",
     "Other effects",
 )
-BIOME_RARITIES = {1: (0, 1), 2: (1, 2), 3: (1, 2), 4: (2, 3), 5: (2, 3)}
+SNACK_CHANCES = (
+    (90, 10, 0, 0),
+    (0, 70, 30, 0),
+    (0, 50, 50, 0),
+    (0, 0, 70, 30),
+    (0, 0, 50, 50),
+)
 RARITY_NAMES = ("Common", "Rare", "Epic", "Legendary")
 INFUSER_RARITY_NAMES = ("Common", "Rare", "Epic", "Event", "Guaranteed")
 INFUSER_CHANCES = ((100, 0, 0), (60, 40, 0), (30, 70, 0), (0, 80, 20), (0, 50, 50))
@@ -38,14 +44,19 @@ def item_pages(catalog, kind, emojis, selected="All", biome=False):
             ),
             key=lambda snack: (snack["rarity"], snack["name"].casefold()),
         )
-        for biome_number, rarities in BIOME_RARITIES.items():
+        for biome_number, chances in enumerate(SNACK_CHANCES, 1):
+            odds = " · ".join(
+                f"{RARITY_NAMES[rarity]} {chance}%"
+                for rarity, chance in enumerate(chances)
+                if chance
+            )
             groups.append(
                 (
-                    f"Biome {biome_number}",
+                    f"Biome {biome_number} · {odds}",
                     [
                         snack
                         for snack in snacks
-                        if snack["normal"] and snack["rarity"] in rarities
+                        if snack["normal"] and chances[snack["rarity"]]
                     ],
                 )
             )

@@ -77,6 +77,8 @@ class Catalog:
         self.infusers = {
             i["id"]: i
             for i in json.loads((self.root / "data/infusers.json").read_text("utf8"))
+            # Enhanced remains in the assets but has no obtainable reward.
+            if i["id"] != 1239
         }
         self.matches = (
             [Match("card", c) for c in self.cards.values()]
