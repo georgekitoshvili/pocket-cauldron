@@ -73,6 +73,7 @@ class Catalog:
         self.events = {event["id"]: event for event in raw.get("events", [])}
         self.organs = {organ["id"]: organ for organ in raw.get("organs", [])}
         self.element_tiers = raw.get("elements", {})
+        self.snacks = {snack["id"]: snack for snack in raw.get("snacks", [])}
         self.infusers = {
             i["id"]: i
             for i in json.loads((self.root / "data/infusers.json").read_text("utf8"))

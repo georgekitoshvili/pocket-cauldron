@@ -127,6 +127,19 @@ class CardEmojis:
                         for element in element_entries(catalog)
                     ]
                     + [
+                        (
+                            kind,
+                            str(entry["id"]),
+                            {"id": entry["id"], "thumbnail": entry["image"]},
+                        )
+                        for kind, entries in (
+                            ("snack", getattr(catalog, "snacks", {}).values()),
+                            ("infuser", catalog.infusers.values()),
+                        )
+                        for entry in entries
+                        if entry.get("image")
+                    ]
+                    + [
                         ("character", character["name"], character)
                         for character in character_entries(catalog)
                     ]
@@ -158,7 +171,7 @@ class CardEmojis:
                         names[name] = emoji
                         count += 1
                     self.values[kind + ":" + key] = str(emoji)
-                for kind in ("element", "character", "organ"):
+                for kind in ("element", "character", "organ", "snack", "infuser"):
                     LOG.info(
                         "%s emoji sync complete: %d.",
                         kind.title(),

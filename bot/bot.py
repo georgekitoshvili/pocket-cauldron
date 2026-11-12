@@ -26,6 +26,7 @@ from card_filters import (
 from discord import app_commands
 from dotenv import load_dotenv
 from element_icons import with_elements
+from item_lists import SNACK_FILTERS, item_pages
 from library_client import LibraryError
 from lookup import ROOT, Catalog, Match, normalize, parse_message
 from monster_cards import monster_pages
@@ -37,6 +38,7 @@ HELP = (
     "```text\n"
     "help        Help and examples.\n"
     "infusers    List infusers.\n"
+    "snacks      Snack effects by biome and stat.\n"
     "elements    Browse element effects by tier.\n"
     "monsters    List monster fights.\n"
     "encounters  List encounters by biome.\n"
@@ -47,6 +49,7 @@ HELP = (
     "**Examples**\n"
     "`!flask Acidburn` — flask\n"
     "`!flask infuser Shielding` — infuser\n"
+    "`!flask snacks` — snacks by biome\n"
     "`!flask element Void` — element tiers\n"
     "`!flask Burning Witch` — monster fight\n"
     "`!flask Witch Cauldron` — encounter\n"
@@ -220,6 +223,8 @@ async def list_response(catalog, kind, owner, send, emojis=None, character=None)
 
 async def info_response(catalog, query, owner, send, level=None, emojis=None):
     query = query.strip()
+    if await route_item_list(catalog, query, owner, send, emojis):
+        return
     if await route_element_query(catalog, query, owner, send, emojis):
         return
     character = organ_character(catalog, query)
@@ -228,15 +233,6 @@ async def info_response(catalog, query, owner, send, level=None, emojis=None):
         return
     if query.lower() in LIST_KINDS:
         await list_response(catalog, LIST_KINDS[query.lower()], owner, send, emojis)
-        return
-    if query.lower() in ("infuser", "infusers"):
-        names = " · ".join(
-            i["name"]
-            for i in sorted(catalog.infusers.values(), key=lambda i: i["name"])
-        )
-        await send(
-            content=f"**All {len(catalog.infusers)} infusers**\n{names}\n\nExample: `!flask infuser Shielding`"
-        )
         return
     if not query:
         await send(content=help_text("info"))
@@ -399,6 +395,78 @@ class MessagePagesView(OwnedView):
                 await interaction.followup.send(content=content)
             )
         await interaction.followup.send(content=messages[-1], view=self)
+
+
+class ItemListView(MessagePagesView):
+    def __init__(self, catalog, kind, owner, emojis=None):
+        super().__init__(owner)
+        self.catalog = catalog
+        self.kind = kind
+        self.emojis = (
+            emojis if emojis is not None else getattr(catalog, "emoji_values", {})
+        )
+        self.selected = "All"
+        self.index = 0
+        self.leading_messages = []
+        self.previous = discord.ui.Button(label="Previous", row=0)
+        self.counter = discord.ui.Button(disabled=True, row=0)
+        self.next = discord.ui.Button(label="Next", row=0)
+        self.previous.callback = self.backwards
+        self.next.callback = self.forwards
+        for button in (self.previous, self.counter, self.next):
+            self.add_item(button)
+        if kind == "snack":
+            self.select = discord.ui.Select(
+                placeholder="Select a snack effect",
+                row=1,
+                options=[
+                    discord.SelectOption(label=label, default=label == "All")
+                    for label in SNACK_FILTERS
+                ],
+            )
+            self.select.callback = self.change_filter
+            self.add_item(self.select)
+        self.rebuild()
+
+    def rebuild(self):
+        self.message_pages = item_pages(
+            self.catalog, self.kind, self.emojis, self.selected
+        )
+        self.counter.label = f"{self.index + 1} / {len(self.message_pages)}"
+        self.previous.disabled = self.next.disabled = len(self.message_pages) == 1
+
+    async def change_filter(self, interaction):
+        self.selected = self.select.values[0]
+        self.index = 0
+        for option in self.select.options:
+            option.default = option.value == self.selected
+        await self.refresh(interaction)
+
+    async def backwards(self, interaction):
+        self.index = (self.index - 1) % len(self.message_pages)
+        await self.refresh(interaction)
+
+    async def forwards(self, interaction):
+        self.index = (self.index + 1) % len(self.message_pages)
+        await self.refresh(interaction)
+
+    async def refresh(self, interaction):
+        await interaction.response.defer()
+        self.rebuild()
+        await self.replace_messages(interaction)
+
+
+async def route_item_list(catalog, query, owner, send, emojis=None):
+    query = re.sub(r"^info\s+", "", query, flags=re.I).strip().casefold()
+    if query in ("snacks", "snack"):
+        kind = "snack"
+    elif query in ("infuser", "infusers"):
+        kind = "infuser"
+    else:
+        return False
+    view = ItemListView(catalog, kind, owner, emojis)
+    await view.send(send)
+    return True
 
 
 class CardListView(MessagePagesView):
@@ -612,7 +680,9 @@ async def route_element_query(catalog, query, owner, send, emojis):
     needle = normalize(parts[1])
     name = next((name for name in names if normalize(name) == needle), None)
     if name is None:
-        await send(content="Element not found. Use `!flask elements` to browse the list.")
+        await send(
+            content="Element not found. Use `!flask elements` to browse the list."
+        )
         return True
     view = ElementsView(catalog, owner, emojis, selected=name)
     await send(content=view.detail_content(name), view=view)
@@ -930,6 +1000,8 @@ class ResultsView(MessagePagesView):
 
 async def lookup_response(catalog, query, owner, send, level=None, emojis=None):
     query = query.strip()
+    if await route_item_list(catalog, query, owner, send, emojis):
+        return
     if await route_element_query(catalog, query, owner, send, emojis):
         return
     character = organ_character(catalog, query)
@@ -1435,11 +1507,25 @@ class FlaskBot(discord.Client):
 
             @parent.command(name="infusers", description="List infusers.")
             async def infusers(interaction: discord.Interaction):
+                await interaction.response.defer(thinking=True)
                 await info_response(
                     self.catalog,
                     "infusers",
                     interaction.user.id,
-                    interaction.response.send_message,
+                    interaction.followup.send,
+                )
+
+            @parent.command(
+                name="snacks", description="List snacks by biome and effect."
+            )
+            async def snacks(interaction: discord.Interaction):
+                await interaction.response.defer(thinking=True)
+                await info_response(
+                    self.catalog,
+                    "snacks",
+                    interaction.user.id,
+                    interaction.followup.send,
+                    emojis=self.card_emojis.values,
                 )
 
             @parent.command(name="organs", description="List organs and their effects.")
