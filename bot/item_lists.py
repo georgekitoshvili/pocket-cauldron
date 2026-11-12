@@ -12,6 +12,8 @@ SNACK_FILTERS = (
 )
 BIOME_RARITIES = {1: (0, 1), 2: (1, 2), 3: (1, 2), 4: (2, 3), 5: (2, 3)}
 RARITY_NAMES = ("Common", "Rare", "Epic", "Legendary")
+INFUSER_RARITY_NAMES = ("Common", "Rare", "Epic", "Event", "Guaranteed")
+INFUSER_CHANCES = ((100, 0, 0), (60, 40, 0), (30, 70, 0), (0, 80, 20), (0, 50, 50))
 
 
 def snack_matches(snack, selected):
@@ -59,16 +61,31 @@ def item_pages(catalog, kind, emojis, selected="All"):
             (title + " · Biomes 4–5 and rewards", groups[3:]),
         ]
     else:
-        groups = [
-            (
-                "",
-                sorted(
-                    catalog.infusers.values(), key=lambda item: item["name"].casefold()
-                ),
+        infusers = sorted(
+            catalog.infusers.values(),
+            key=lambda item: (item.get("rarity", 0), item["name"].casefold()),
+        )
+        sections = []
+        for biome, chances in enumerate(INFUSER_CHANCES, 1):
+            odds = " · ".join(
+                f"{INFUSER_RARITY_NAMES[rarity]} {chance}%"
+                for rarity, chance in enumerate(chances)
+                if chance
             )
-        ]
-        title = f"**All {len(catalog.infusers)} infusers**"
-        sections = [(title, groups)]
+            items = [
+                item
+                for item in infusers
+                if item.get("rarity", 0) < 3 and chances[item.get("rarity", 0)]
+            ]
+            groups = [(f"Biome {biome} · {odds}", items)]
+            if biome == 5:
+                groups.append(
+                    (
+                        "Special rewards · Not in normal random rolls",
+                        [item for item in infusers if item.get("rarity", 0) >= 3],
+                    )
+                )
+            sections.append(("**Infusers**", groups))
     pages = []
     for title, section_groups in sections:
         chunks = []
@@ -76,11 +93,11 @@ def item_pages(catalog, kind, emojis, selected="All"):
         for heading, items in section_groups:
             for index, item in enumerate(items):
                 icon = emojis.get(f"{kind}:{item['id']}", "")
-                rarity = (
-                    f" ({RARITY_NAMES[item['rarity']]})"
-                    if kind == "snack" and item["normal"]
-                    else ""
-                )
+                rarity = ""
+                if kind == "infuser":
+                    rarity = f" ({INFUSER_RARITY_NAMES[item.get('rarity', 0)]})"
+                elif item["normal"]:
+                    rarity = f" ({RARITY_NAMES[item['rarity']]})"
                 row = (
                     f"{icon} **{item['name']}**{rarity} — {item['description']}".strip()
                 )
@@ -91,7 +108,7 @@ def item_pages(catalog, kind, emojis, selected="All"):
                     body = ""
                 body += row + "\n"
         if body.strip() == title:
-            body += "No matching snacks on this page."
+            body += f"No matching {kind}s on this page."
         chunks.append(body.rstrip())
         pages.extend(chunks[index : index + 3] for index in range(0, len(chunks), 3))
     return pages

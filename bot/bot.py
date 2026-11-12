@@ -37,7 +37,7 @@ HELP = (
     "**Pocket Cauldron**\n"
     "```text\n"
     "help        Help and examples.\n"
-    "infusers    List infusers.\n"
+    "infusers    Browse infusers by biome and rarity.\n"
     "snacks      Snack effects by biome and stat.\n"
     "elements    Browse element effects by tier.\n"
     "monsters    List monster fights.\n"
@@ -1522,7 +1522,7 @@ class FlaskBot(discord.Client):
                     self.card_emojis.values,
                 )
 
-            @parent.command(name="infusers", description="List infusers.")
+            @parent.command(name="infusers", description="Browse infusers by biome and rarity.")
             async def infusers(interaction: discord.Interaction):
                 await interaction.response.defer(thinking=True)
                 await info_response(

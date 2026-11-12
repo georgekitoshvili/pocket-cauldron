@@ -23,7 +23,7 @@ A Discord bot for FLASK cards, infusers, monster fights, special encounters and 
 | `!flask druid` / `!flask life` | Filter by any class or element. Use the controls for pages and levels. |
 | `!flask artificer damage` / `!flask artificer armor` / `!flask artificer shield` | Filter a class by !flask effects. `artifacter` and `strike` also work as aliases. |
 | `!flask infuser Shielding` | Show an infuser and its effect. |
-| `!flask infusers` | List all infusers. |
+| `!flask infusers` | Browse infusers by biome, with rarity, roll chances and effects. |
 | `!flask elements` | Browse elements and select one to see all three tiers. |
 | `!flask snacks` | Browse snack effects by biome and filter by stat. |
 | `!flask snacks strength` | Filter snacks directly by effect. |
