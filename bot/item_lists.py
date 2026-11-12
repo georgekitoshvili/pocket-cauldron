@@ -55,9 +55,8 @@ def item_pages(catalog, kind, emojis, selected="All"):
         )
         title = "**Snacks**" + (f" · {selected}" if selected != "All" else "")
         sections = [
-            (title + " · Biomes 1–2", groups[:2]),
-            (title + " · Biomes 3–4", groups[2:4]),
-            (title + " · Biome 5 and rewards", groups[4:]),
+            (title + " · Biomes 1–3", groups[:3]),
+            (title + " · Biomes 4–5 and rewards", groups[3:]),
         ]
     else:
         groups = [
