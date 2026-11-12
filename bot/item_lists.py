@@ -67,7 +67,7 @@ def item_pages(catalog, kind, emojis, selected="All", biome=False):
             catalog.infusers.values(),
             key=lambda item: (item.get("rarity", 0), item["name"].casefold()),
         )
-        sections = []
+        biome_groups = []
         for biome_number, chances in enumerate(INFUSER_CHANCES, 1):
             odds = " · ".join(
                 f"{INFUSER_RARITY_NAMES[rarity]} {chance}%"
@@ -87,7 +87,11 @@ def item_pages(catalog, kind, emojis, selected="All", biome=False):
                         [item for item in infusers if item.get("rarity", 0) >= 3],
                     )
                 )
-            sections.append(("**Infusers**", groups))
+            biome_groups.extend(groups)
+        sections = [
+            ("**Infusers** · Biomes 1–3", biome_groups[:3]),
+            ("**Infusers** · Biomes 4–5 and rewards", biome_groups[3:]),
+        ]
         if not biome:
             sections = [("**Infusers**", [("", infusers)])]
     pages = []
