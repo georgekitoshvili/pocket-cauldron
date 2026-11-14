@@ -28,6 +28,7 @@ KEYWORD_ALIASES = {
         "strength reduction",
     ),
     "Chain": ("chain",),
+    "Combo": ("combo",),
     "Echo": ("echo",),
     "Gamble": ("gamble", "gambling"),
     "Luck": ("luck",),
