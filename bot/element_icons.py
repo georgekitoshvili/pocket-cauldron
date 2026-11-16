@@ -22,6 +22,8 @@ def element_entries(catalog):
 
 def with_elements(text, card, emojis=None):
     icons = emojis or {}
+    if card.get("tags"):
+        text += " · Tags: " + ", ".join(card["tags"])
     suffix = " ".join(
         icons.get("element:" + name, f"[{name}]") for name in card.get("elements", [])
     )

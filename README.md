@@ -45,7 +45,7 @@ A Discord bot for FLASK cards, infusers, monster fights, special encounters and 
 
 Slash commands are also available under `/flask`.
 Search individual drone types with `!flask artificer d-drone`, `s-drone`, `h-drone` or `r-drone`. These match descriptions mentioning that type; `!flask artificer drone` includes general drone effects too.
-Flask descriptions show their element icons at the end.
+Flask descriptions show the game's tags, followed by element icons. Search any tag directly, including with a class name; description keywords remain searchable too.
 Flask search pages use up to three consecutive messages, with navigation and level controls on the last message.
 
 
@@ -82,4 +82,4 @@ With Python installed, open the **exporter** folder and run **Start Exporter.cmd
 
 Unofficial community project. FLASK content belongs to its respective creators.
 
-Organ lists use up to two consecutive messages, with organ selection and page controls on the last message.
+Organ lists use up to three consecutive messages, with character selection and page controls on the last message.

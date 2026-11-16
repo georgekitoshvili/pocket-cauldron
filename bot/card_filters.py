@@ -85,9 +85,19 @@ def filter_key(text):
     )
 
 
-def resolve_keyword(text):
+def keyword_aliases(catalog=None):
+    aliases = dict(KEYWORD_ALIASES)
+    if catalog is not None:
+        for card in catalog.cards.values():
+            for tag in card.get("tags", []):
+                if not any(filter_key(tag) == filter_key(name) for name in aliases):
+                    aliases[tag] = (tag,)
+    return aliases
+
+
+def resolve_keyword(text, catalog=None):
     needle = filter_key(text)
-    for keyword, aliases in KEYWORD_ALIASES.items():
+    for keyword, aliases in keyword_aliases(catalog).items():
         if needle in {filter_key(alias) for alias in (keyword, *aliases)}:
             return keyword
     return None
@@ -107,6 +117,8 @@ def reduces_strength(text):
 
 
 def matches_keyword(catalog, card, keyword, level):
+    if any(filter_key(tag) == filter_key(keyword) for tag in card.get("tags", [])):
+        return True
     text = catalog.description(card, level)
     if keyword == "Negative Strength":
         return reduces_strength(text)
@@ -148,6 +160,7 @@ def filter_names(catalog):
 
 def parse_filter(catalog, query):
     query = re.sub(r"\bflasks?\b", "", query, flags=re.I).strip()
+    query = re.sub(r"\b(?:tags?|keywords?)\b", "", query, flags=re.I).strip()
     query = re.sub(r"\b(?:artifacter|artrifacter)\b", "Artificer", query, flags=re.I)
     starting = re.search(r"\bstarting\s+(?:level\s+)?(\d+)\b", query, re.I)
     if starting:
@@ -175,7 +188,7 @@ def parse_filter(catalog, query):
     for element in elements:
         if needle == normalize(element):
             return CardFilter(element=element)
-    for keyword, aliases in KEYWORD_ALIASES.items():
+    for keyword, aliases in keyword_aliases(catalog).items():
         for alias in aliases:
             alias_key = filter_key(alias)
             if needle == alias_key:

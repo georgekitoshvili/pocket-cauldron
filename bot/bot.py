@@ -16,10 +16,10 @@ from build_protocol import MAX_BUILD_BYTES, decode_build, decode_code
 from builds import BuildCatalog
 from card_emojis import CardEmojis
 from card_filters import (
-    KEYWORD_ALIASES,
     CardFilter,
     card_pages,
     filter_names,
+    keyword_aliases,
     parse_filter,
     resolve_keyword,
 )
@@ -57,7 +57,7 @@ HELP = (
     "`!flask Witch Cauldron` — encounter\n"
     "`!flask rogue organs` — compatible organs\n"
     "`!flask rogue kunai` — class + keyword\n\n"
-    "**Search by keyword:** use any class with a keyword, e.g. "
+    "**Search by tag or keyword:** use any class with a tag or keyword, e.g. "
     "`!flask ranger health`, `!flask artificer drone`, `!flask artificer heat` or `!flask artificer frost`. "
     "Drone types: `!flask artificer d-drone`, `s-drone`, `h-drone` or `r-drone`. "
     "Try `!flask druid beetle`, `!flask druid spirits` or `!flask warrior taunt`. "
@@ -1295,7 +1295,7 @@ class FlaskBot(discord.Client):
         ):
             await interaction.response.defer(thinking=True)
             classes, elements = filter_names(self.catalog)
-            resolved_keyword = resolve_keyword(keyword) if keyword is not None else None
+            resolved_keyword = resolve_keyword(keyword, self.catalog) if keyword is not None else None
             if keyword is not None and resolved_keyword is None:
                 await interaction.followup.send(
                     "Choose a keyword from the suggestions."
@@ -1347,10 +1347,10 @@ class FlaskBot(discord.Client):
 
         @filter_flasks.autocomplete("keyword")
         async def filter_keyword_autocomplete(interaction, current: str):
-            resolved = resolve_keyword(current)
+            resolved = resolve_keyword(current, self.catalog)
             return [
                 app_commands.Choice(name=name, value=name)
-                for name, aliases in sorted(KEYWORD_ALIASES.items())
+                for name, aliases in sorted(keyword_aliases(self.catalog).items())
                 if name == resolved
                 or any(
                     current.casefold() in alias.casefold() for alias in (name, *aliases)
