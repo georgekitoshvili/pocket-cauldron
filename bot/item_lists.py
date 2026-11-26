@@ -18,8 +18,14 @@ SNACK_CHANCES = (
     (0, 0, 50, 50),
 )
 RARITY_NAMES = ("Common", "Rare", "Epic", "Legendary")
-INFUSER_RARITY_NAMES = ("Common", "Rare", "Epic", "Event", "Guaranteed")
-INFUSER_CHANCES = ((100, 0, 0), (60, 40, 0), (30, 70, 0), (0, 80, 20), (0, 50, 50))
+INFUSER_RARITY_NAMES = ("Common", "Rare", "Epic", "Legendary", "Event", "Guaranteed")
+INFUSER_CHANCES = (
+    (90, 10, 0, 0),
+    (50, 40, 10, 0),
+    (0, 65, 35, 0),
+    (0, 45, 45, 10),
+    (0, 25, 50, 25),
+)
 
 
 def snack_matches(snack, selected):
@@ -88,14 +94,14 @@ def item_pages(catalog, kind, emojis, selected="All", biome=False):
             items = [
                 item
                 for item in infusers
-                if item.get("rarity", 0) < 3 and chances[item.get("rarity", 0)]
+                if item.get("rarity", 0) < 4 and chances[item.get("rarity", 0)]
             ]
             groups = [(f"Biome {biome_number} · {odds}", items)]
             if biome_number == 5:
                 groups.append(
                     (
                         "Special rewards · Not in normal random rolls",
-                        [item for item in infusers if item.get("rarity", 0) >= 3],
+                        [item for item in infusers if item.get("rarity", 0) >= 4],
                     )
                 )
             biome_groups.extend(groups)
