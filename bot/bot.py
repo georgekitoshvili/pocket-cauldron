@@ -713,6 +713,29 @@ async def route_element_query(catalog, query, owner, send, emojis):
     return True
 
 
+def event_reward_content(catalog, event, emojis=None):
+    emojis = emojis if emojis is not None else getattr(catalog, "emoji_values", {})
+    rows = [
+        f"**{event['name']} · {event.get('location', 'Special encounter')}**",
+        "Receive one random flask you do not already own. If you own all four, receive the infuser alone.",
+        "**Possible flasks · Base values**",
+    ]
+    for reward in event['reward_flasks']:
+        card = catalog.cards[reward['id']]
+        level = reward['level']
+        description = discord.utils.escape_markdown(" ".join(catalog.description(card, level).split()))
+        rows.append(
+            f"{emojis.get(card['id'], '🧪')} **{discord.utils.escape_markdown(card['name'])}** "
+            f"(Lv {level}) — {with_elements(description, card, emojis)}"
+        )
+    infuser = catalog.infusers[event['reward_infuser']]
+    rows.append(
+        f"\n{emojis.get('infuser:' + str(infuser['id']), '⚗️')} **{infuser['name']}** — "
+        + infuser['description']
+    )
+    return "\n".join(rows)
+
+
 class DetailView(OwnedView):
     def __init__(self, catalog: Catalog, match: Match, owner: int, level=None):
         super().__init__(owner)
@@ -983,6 +1006,13 @@ class ResultsView(MessagePagesView):
             return
         match = self.catalog.by_key[self.select.values[0]]
         await self.clear_leading_messages()
+        if match.kind == "event" and match.item.get('reward_flasks') and self.level is None:
+            await interaction.edit_original_response(
+                content=event_reward_content(self.catalog, match.item, self.emojis),
+                embeds=[], attachments=[], view=None,
+            )
+            self.stop()
+            return
         if match.kind == "monster":
             try:
                 view = AdviceView(
@@ -1052,6 +1082,9 @@ async def lookup_response(catalog, query, owner, send, level=None, emojis=None):
         )
         return
     if exact and len(matches) == 1:
+        if matches[0].kind == "event" and matches[0].item.get('reward_flasks') and level is None:
+            await send(content=event_reward_content(catalog, matches[0].item, emojis))
+            return
         if matches[0].kind == "organ":
             await send(content=result_line(matches[0], emojis))
             return

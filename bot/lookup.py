@@ -11,6 +11,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 
 from element_icons import with_elements
+from item_lists import INFUSER_RARITY_NAMES
 from library_client import LibraryClient
 
 ROOT = Path(__file__).resolve().parent
@@ -255,7 +256,7 @@ class Catalog:
                     description=i["description"],
                     image=i["image"],
                     small=True,
-                    fields=[],
+                    fields=[("Rarity", INFUSER_RARITY_NAMES[i.get("rarity", 0)])],
                     footer=f"FLASK Demo {self.version} · Infuser #{i['id']}",
                 )
             ]
